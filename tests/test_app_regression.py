@@ -98,6 +98,12 @@ def case_upload_and_vision_without_key():
             return self._data
 
     images = sorted((ROOT / "samples").glob("*.jpg"))
+    if not images:
+        # samples/ 里是用户自己的真实跑步截图（.gitignore 排除，不进仓库）。
+        # 干净克隆或删过 samples/ 的环境没有这些图，这一段 OCR 断言无从验证——
+        # 跳过而不是判失败，否则所有人 clone 下来跑测试都会红。
+        print("  [SKIP] samples/ 无截图，跳过截图识别相关的 4 项断言")
+        return
     original_uploader = st.file_uploader
 
     def fake_uploader(*args, **kwargs):
