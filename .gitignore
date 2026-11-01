@@ -14,6 +14,12 @@ env/
 # Windows shortcut (local path only, not useful in the repo)
 *.lnk
 
+# Word 临时锁文件（打开文档时生成）
+~$*
+
+# 个人申报表（含真实个人信息，绝不能进公开仓库）
+申报.doc
+
 # OS / editor
 .DS_Store
 Thumbs.db

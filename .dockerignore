@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.git/
+.gitignore
+.streamlit/secrets.toml
+.env
+.env.*
+*.lnk
+*.md
+screenshots/
+backup-profile/
+tools/
+vendor/
