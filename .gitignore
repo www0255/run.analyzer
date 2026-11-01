@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Streamlit / secrets
+.streamlit/secrets.toml
+.env
+.env.*
+
+# Windows shortcut (local path only, not useful in the repo)
+*.lnk
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
