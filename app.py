@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 import coach_knowledge as coach
@@ -268,20 +269,33 @@ def has_heart_rate(df) -> bool:
 
 
 def render_general_charts(df: pd.DataFrame) -> None:
-    specs = [
-        ("里程(km)", "每次跑步里程趋势"),
-        ("配速(min/km)", "配速变化（数值越小越快）"),
+    """三条曲线同图对比：各自按本序列的最小/最大值归一化到 0-100，看趋势是否同步。"""
+    series = [
+        ("里程(km)", "里程", theme.SILVER),
+        ("配速(min/km)", "配速", theme.SILVER_DIM),
     ]
     if has_heart_rate(df):
-        specs.append((HEART_RATE_COLUMN, "平均心率变化"))
-    columns = st.columns(len(specs))
-    for container, (column, title) in zip(columns, specs):
-        with container:
-            figure = px.line(df, x="日期", y=column, markers=True, title=title)
-            accent = theme.FOCUS if column == HEART_RATE_COLUMN else theme.ACCENT
-            render_figure(theme.style_figure(figure, accent=accent))
+        series.append((HEART_RATE_COLUMN, "心率", theme.STEEL))
+
+    figure = go.Figure()
+    for column, label, color in series:
+        values = pd.to_numeric(df[column], errors="coerce")
+        span = float(values.max() - values.min()) if values.notna().any() else 0.0
+        if span > 0:
+            normalized = (values - values.min()) / span * 100
+        else:
+            normalized = values * 0 + 50
+        figure.add_scatter(
+            x=df["日期"], y=normalized.round(1), mode="lines+markers", name=label,
+            line=dict(color=color, width=2.2, shape="spline", smoothing=0.6),
+            marker=dict(size=4, color=color, line=dict(width=1, color=theme.BG), opacity=.7),
+            hovertemplate="%{x|%m-%d}　" + label + " %{y:.0f}/100<extra></extra>",
+        )
+    figure.update_layout(yaxis=dict(range=[-8, 108]), xaxis=dict(tickformat="%m-%d"))
+    render_figure(theme.apply_base(figure, height=400))
+    st.caption("三条曲线各自归一化到 0–100（只比较趋势与同步性，不改变原始数值）；曲线为平滑插值。")
     if not has_heart_rate(df):
-        st.caption("该数据没有心率列，心率变化图已跳过。")
+        st.caption("该数据没有心率列，心率已从对比图中省略。")
 
 
 def render_police_chart(df: pd.DataFrame, goal_seconds: int) -> None:
@@ -292,7 +306,7 @@ def render_police_chart(df: pd.DataFrame, goal_seconds: int) -> None:
         markers=True,
         title="1000 米折算用时趋势（数值越小越快）",
     )
-    theme.style_figure(figure, accent=theme.ACCENT, height=300)
+    theme.style_figure(figure, accent=theme.SILVER, height=320)
     figure.add_hline(
         y=goal_seconds,
         line_dash="dash",
@@ -304,13 +318,14 @@ def render_police_chart(df: pd.DataFrame, goal_seconds: int) -> None:
 
 
 def render_stats(df: pd.DataFrame, mode: str, goal_seconds: int) -> None:
-    columns = st.columns(4)
-    # 单位放进标签，数值保持纯数字：暗色等宽排版下更整齐，也不会被截断
-    columns[0].metric("跑步次数", "{0}".format(len(df)))
-    columns[1].metric("累计里程 (km)", "{0:.2f}".format(df["里程(km)"].sum()))
-    columns[2].metric("平均配速 (min/km)", "{0:.2f}".format(df["配速(min/km)"].mean()))
+    # 四方图：2×2 排布，单位进标签，数值保持纯数字
+    top = st.columns(2)
+    bottom = st.columns(2)
+    top[0].metric("跑步次数", "{0}".format(len(df)))
+    top[1].metric("累计里程 (km)", "{0:.2f}".format(df["里程(km)"].sum()))
+    bottom[0].metric("平均配速 (min/km)", "{0:.2f}".format(df["配速(min/km)"].mean()))
     heart_rate_text = "{0:.0f}".format(df[HEART_RATE_COLUMN].mean()) if has_heart_rate(df) else "—"
-    columns[3].metric("平均心率 (bpm)", heart_rate_text)
+    bottom[1].metric("平均心率 (bpm)", heart_rate_text)
 
     if mode == MODE_POLICE:
         times = df["1000米用时(秒)"]
