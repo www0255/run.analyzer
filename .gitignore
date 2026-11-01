@@ -22,6 +22,11 @@ env/
 提交信息-私人.md
 答辩口播稿-私人.md
 
+# 用户自己的跑步记录截图（个人数据，绝不进公开仓库）
+samples/
+samples-*/
+*.screenshot-*
+
 # OS / editor
 .DS_Store
 Thumbs.db

@@ -2,3 +2,7 @@ streamlit>=1.30
 pandas>=2.0
 plotly>=5.18
 openai>=1.12
+# 钉死版本，避免 OCR 输出格式随版本漂移（1.4.4 会把 "2026-11-1 07:00" 合并成 "2026-11-107:00"）
+rapidocr-onnxruntime==1.4.4 ; python_version < "3.13"
+rapidocr-onnxruntime==1.2.3 ; python_version >= "3.13"
+onnxruntime>=1.17
