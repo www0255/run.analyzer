@@ -36,8 +36,9 @@ def case_demo_general():
     expect(not at.exception, "无未捕获异常", [str(e) for e in at.exception])
     expect(len(at.radio) >= 1, "侧边栏模式单选存在")
     expect("内置样例 run_data.csv" in texts(at), "CSV 兜底：自动载入 run_data.csv")
-    expect(any("兼容：直接上传 CSV 文件" in str(exp.label) for exp in at.expander), "CSV 上传在 expander 内")
-    expect(any("上传跑步记录截图" in str(s.value) for s in at.subheader), "截图上传区是主入口")
+    expect(any("上传跑步记录" in str(s.value) for s in at.subheader), "统一上传区在主入口")
+    expect(any("数据来源" in str(r.label) for r in at.radio), "存在「截图识别 / CSV 文件」切换")
+    expect(any("环境自检" in str(exp.label) for exp in at.expander), "环境自检收在上传区内")
     return at
 
 
@@ -54,9 +55,8 @@ def case_heart_rate_optional():
     expect(not at.exception, "无未捕获异常", [str(e) for e in at.exception])
     joined = "\n".join([str(w.value) for w in at.warning])
     expect("心率" in joined, "页面给出心率跳过提示", repr(joined[-80:]))
-    metrics = {str(m.label): str(m.value) for m in at.metric}
-    expect(metrics.get("平均心率 (BPM)") == "—" or metrics.get("平均心率 (bpm)") == "—",
-           "平均心率统计显示 —", repr({k: v for k, v in metrics.items() if "心率" in k}))
+    grid = "\n".join(str(m.value) for m in at.markdown)
+    expect("平均心率" in grid and "—" in grid, "四方图里平均心率显示 —", repr(grid[-120:]))
     expect("每次跑步里程趋势" not in "", "图表标题不计入文本")
     return at
 
@@ -70,7 +70,8 @@ def case_police_and_slider():
     if at.slider:
         at.slider[0].set_value(300).run()
         expect(not at.exception, "拖动滑块后无异常", [str(e) for e in at.exception])
-        expect(any("参考目标线" in str(m.label) for m in at.metric), "警校模式出现 1000 米折算指标")
+        grid = "\n".join(str(m.value) for m in at.markdown)
+        expect("参考目标线" in grid and "1000 米" in grid, "四方图出现 1000 米折算指标", repr(grid[-120:]))
     return at
 
 

@@ -7,6 +7,7 @@
 
 import inspect
 import json
+import re
 import logging
 import sys
 import time
@@ -263,6 +264,59 @@ def format_seconds(seconds: float) -> str:
     return "{0}分{1:02d}秒".format(total // 60, total % 60)
 
 
+def preview_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """数据预览用：日期只显示到「月-日」，其余列保持原样。"""
+    view = df.copy()
+    if "日期" in view.columns:
+        parsed = pd.to_datetime(view["日期"], errors="coerce")
+        view["日期"] = parsed.dt.strftime("%m-%d").fillna(view["日期"].astype(str))
+    return view
+
+
+def render_stat_grid(items: list, per_row: int = 2) -> None:
+    """四方图：一块立体卡片里按网格排布指标，格间用十字分隔线。"""
+    cells = "".join(
+        '<div class="ra-cell"><div class="ra-cell-label">{0}</div>'
+        '<div class="ra-cell-value">{1}</div></div>'.format(label, value)
+        for label, value in items
+    )
+    st.markdown(
+        '<div class="ra-grid ra-cols-{0}">{1}</div>'.format(per_row, cells),
+        unsafe_allow_html=True,
+    )
+
+
+def split_analysis_sections(text: str) -> list:
+    """把分析正文按小节切开，返回 [(标题, 正文)]。"""
+    sections, title, buffer = [], "", []
+    for raw in text.splitlines():
+        line = raw.strip().lstrip("#").strip()
+        if not line:
+            continue
+        if re.match(r"^([一二三四五六七八九十]+[、.．]|[0-9]+[、.．])", line):
+            if title or buffer:
+                sections.append((title, " ".join(buffer)))
+            title, buffer = line, []
+        else:
+            buffer.append(line)
+    if title or buffer:
+        sections.append((title, " ".join(buffer)))
+    return sections
+
+
+def render_compact_analysis(text: str) -> None:
+    """每个小节只露约 30 字，全文收进一个可展开方框，避免页面臃肿。"""
+    sections = split_analysis_sections(text)
+    if not sections:
+        st.markdown(text)
+        return
+    for title, body in sections[:6]:
+        summary = body[:30] + ("…" if len(body) > 30 else "")
+        st.markdown("**{0}**　{1}".format(title or "要点", summary))
+    with st.expander("展开完整评估与训练计划", expanded=False):
+        st.markdown(text)
+
+
 def has_heart_rate(df) -> bool:
     """心率是可选列：没有列、或整列无有效数值时，相关序列整体跳过。"""
     return HEART_RATE_COLUMN in df.columns and bool(df[HEART_RATE_COLUMN].notna().any())
@@ -306,26 +360,23 @@ def render_police_chart(df: pd.DataFrame, goal_seconds: int) -> None:
 
 
 def render_stats(df: pd.DataFrame, mode: str, goal_seconds: int) -> None:
-    # 四方图：2×2 排布，单位进标签，数值保持纯数字
-    top = st.columns(2)
-    bottom = st.columns(2)
-    top[0].metric("跑步次数", "{0}".format(len(df)))
-    top[1].metric("累计里程 (km)", "{0:.2f}".format(df["里程(km)"].sum()))
-    bottom[0].metric("平均配速 (min/km)", "{0:.2f}".format(df["配速(min/km)"].mean()))
     heart_rate_text = "{0:.0f}".format(df[HEART_RATE_COLUMN].mean()) if has_heart_rate(df) else "—"
-    bottom[1].metric("平均心率 (bpm)", heart_rate_text)
+    render_stat_grid([
+        ("跑步次数", "{0}".format(len(df))),
+        ("累计里程 km", "{0:.2f}".format(df["里程(km)"].sum())),
+        ("平均配速 min/km", "{0:.2f}".format(df["配速(min/km)"].mean())),
+        ("平均心率 bpm", heart_rate_text),
+    ])
 
     if mode == MODE_POLICE:
         times = df["1000米用时(秒)"]
         best = float(times.min())
         gap = best - goal_seconds
-        police_columns = st.columns(3)
-        police_columns[0].metric("最好折算 1000 米", format_seconds(best))
-        police_columns[1].metric("参考目标线（可自行设置）", format_seconds(goal_seconds))
-        police_columns[2].metric(
-            "与参考目标线的差距",
-            "{0}（{1}）".format(format_seconds(abs(gap)), "落后" if gap > 0 else "领先"),
-        )
+        render_stat_grid([
+            ("最好折算 1000 米", format_seconds(best)),
+            ("参考目标线（可自行设置）", format_seconds(goal_seconds)),
+            ("与参考目标线的差距", "{0} {1}".format(format_seconds(abs(gap)), "落后" if gap > 0 else "领先")),
+        ], per_row=3)
 
 
 def build_stats_text(df: pd.DataFrame, mode: str, goal_seconds: int) -> str:
@@ -448,16 +499,36 @@ def render_sidebar() -> tuple:
     }
 
 
-def read_input_source():
-    uploaded = st.file_uploader("上传跑步记录 CSV", type=["csv"])
-    if uploaded is not None:
-        logger.info("数据来源: 上传文件 file=%s", uploaded.name)
-        return uploaded
+def fallback_source():
+    """没有任何上传时退回仓库内置样例，保证演示模式永远有数据可看。"""
     sample = BASE_DIR / "run_data.csv"
     if sample.exists():
         st.caption("未上传文件，已自动载入仓库内置样例 run_data.csv")
         return str(sample)
     return None
+
+
+def render_data_entry(settings: dict):
+    """数据入口：同一个方框里切换「截图识别 / CSV 文件」，引擎自检也收在这里。"""
+    csv_source = None
+    with st.container(border=True):
+        st.subheader("上传跑步记录")
+        entry_mode = st.radio(
+            "数据来源（可切换）",
+            ["截图识别", "CSV 文件"],
+            horizontal=True,
+            key="entry_mode",
+        )
+        if entry_mode == "CSV 文件":
+            uploaded = st.file_uploader("上传 CSV（列格式见 README 第 7 节）",
+                                        type=["csv"], key="csv_uploader")
+            render_engine_diagnostics()
+            if uploaded is not None:
+                logger.info("数据来源: 上传文件 file=%s", uploaded.name)
+                csv_source = uploaded
+        else:
+            render_screenshot_entry(settings)
+    return csv_source
 
 
 SCREENSHOT_FRAME = "screenshot_frame"
@@ -510,9 +581,9 @@ def render_engine_diagnostics() -> None:
 
 def render_screenshot_entry(settings: dict):
     """主入口：上传截图 -> 离线/视觉识别 -> 人工校正 -> 导出 CSV 或接入分析。"""
-    st.subheader("上传跑步记录截图（PNG/JPG）")
+    st.caption("截图模式：一张图 = 一次跑步，可一次选多张")
     uploaded = st.file_uploader(
-        "可以一次选多张（一张截图 = 一次跑步）",
+        "选择跑步记录截图（PNG / JPG）",
         type=["png", "jpg", "jpeg"],
         accept_multiple_files=True,
         key="screenshot_uploader",
@@ -593,19 +664,19 @@ def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings:
 
     if demo_mode:
         st.success("演示模式 · 预置样例结果")
-        st.markdown(demo_content)
+        render_compact_analysis(demo_content)
         logger.info("分析渲染: mode=%s source=预置样例(演示模式)", mode)
         return
 
     if not settings["api_key"]:
         st.warning("真实 AI 模式需要 API Key，当前未填写，已自动使用演示结果。")
         st.success("演示模式 · 预置样例结果")
-        st.markdown(demo_content)
+        render_compact_analysis(demo_content)
         return
 
     if df is None:
         st.warning("真实 AI 模式需要跑步记录数据，请先上传 CSV；当前已展示演示结果。")
-        st.markdown(demo_content)
+        render_compact_analysis(demo_content)
         return
 
     if not st.button("生成分析与训练计划", type="primary"):
@@ -623,7 +694,7 @@ def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings:
         st.markdown(demo_content)
         return
 
-    st.markdown(text)
+    render_compact_analysis(text)
     logger.info("分析渲染: mode=%s source=真实AI", mode)
 
 
@@ -641,16 +712,15 @@ def main() -> None:
     goal_seconds = DEFAULT_GOAL_SECONDS
     notes, error = [], None
 
-    # 主入口：页面顶部第一个交互就是截图上传
-    render_screenshot_entry(settings)
+    # 主入口：一个方框内切换「截图识别 / CSV 文件」，引擎自检也收在里面
+    csv_source = render_data_entry(settings)
 
     if demo_mode:
         st.success("演示模式 · 预置样例结果 —— 无需 API Key、不依赖网络。")
     else:
         st.info("真实 AI 模式：将调用外部大模型接口，失败时自动降级为演示结果。")
 
-    with st.expander("兼容：直接上传 CSV 文件", expanded=False):
-        source = read_input_source()
+    source = csv_source if csv_source is not None else fallback_source()
 
     active_frame = st.session_state.get(ACTIVE_FRAME)
     if active_frame is not None:
@@ -668,7 +738,7 @@ def main() -> None:
         df = None
     elif df is not None:
         st.subheader("数据预览（已清洗）")
-        st.dataframe(df)
+        st.dataframe(preview_frame(df), hide_index=True)
 
         analysis_df = with_police_columns(df) if mode == MODE_POLICE else df
 

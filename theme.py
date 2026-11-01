@@ -213,6 +213,66 @@ h3, [data-testid="stMarkdownContainer"] h3 {
 }
 [data-testid="stExpander"] summary:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 2px 0 #0A0B0D, 0 6px 14px rgba(0,0,0,.4); }
 
+/* ===== 四方图：一块立体卡片 + 十字分隔 ===== */
+.ra-grid {
+  display: grid; border: 1px solid #34373C; border-radius: 14px; overflow: hidden;
+  background: linear-gradient(180deg, #1C1E22 0%%, #141619 100%%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 10px 26px rgba(0,0,0,.45);
+  margin: 6px 0 4px;
+}
+.ra-cols-2 { grid-template-columns: repeat(2, 1fr); }
+.ra-cols-3 { grid-template-columns: repeat(3, 1fr); }
+.ra-cell {
+  padding: 16px 18px 14px;
+  border-right: 1px solid #262A2F; border-bottom: 1px solid #262A2F;
+}
+.ra-cols-2 .ra-cell:nth-child(2n) { border-right: none; }
+.ra-cols-2 .ra-cell:nth-last-child(-n+2) { border-bottom: none; }
+.ra-cols-3 .ra-cell:nth-child(3n) { border-right: none; }
+.ra-cols-3 .ra-cell:nth-last-child(-n+3) { border-bottom: none; }
+.ra-cell-label {
+  font-size: .68rem; letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--ra-muted); margin-bottom: 6px;
+}
+.ra-cell-value {
+  font-family: %(mono)s; font-variant-numeric: tabular-nums;
+  font-size: 1.72rem; font-weight: 700; letter-spacing: -0.6px; color: #F5F6F8;
+  text-shadow: 0 1px 0 #9BA1A8, 0 2px 6px rgba(0,0,0,.6);
+}
+
+/* ===== 按钮：加大立体感（兼容 Streamlit 新版 data-testid 结构） ===== */
+[data-testid="stButton"] button, [data-testid="stDownloadButton"] button,
+[data-testid="stBaseButton-secondary"] {
+  background: linear-gradient(180deg, #33363B 0%%, #232629 45%%, #191B1E 100%%) !important;
+  border: 1px solid #3E4247 !important; border-top-color: #5A5F66 !important;
+  border-radius: 11px !important; color: #EDEFF2 !important; font-weight: 600 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 -2px 4px rgba(0,0,0,.45),
+              0 3px 0 #0B0C0E, 0 10px 20px rgba(0,0,0,.5) !important;
+  transition: transform .07s ease, box-shadow .07s ease, border-color .15s ease;
+}
+[data-testid="stButton"] button:hover, [data-testid="stDownloadButton"] button:hover {
+  border-color: #6A7079 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), inset 0 -2px 4px rgba(0,0,0,.4),
+              0 4px 0 #0B0C0E, 0 14px 26px rgba(0,0,0,.55) !important;
+}
+[data-testid="stButton"] button:active, [data-testid="stDownloadButton"] button:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 3px 8px rgba(0,0,0,.7), 0 1px 0 #0B0C0E !important;
+}
+[data-testid="stBaseButton-primary"], [data-testid="stButton"] button[kind="primary"] {
+  background: linear-gradient(180deg, #F6F7F9 0%%, #CBD0D6 48%%, #A9AFB7 100%%) !important;
+  border: 1px solid #878D95 !important; border-top-color: #FFFFFF !important;
+  color: #14161A !important;
+  box-shadow: inset 0 1px 0 #FFFFFF, inset 0 -3px 5px rgba(0,0,0,.22),
+              0 4px 0 #6C727A, 0 14px 26px rgba(0,0,0,.6) !important;
+  text-shadow: 0 1px 0 rgba(255,255,255,.55);
+}
+[data-testid="stBaseButton-primary"]:active,
+[data-testid="stButton"] button[kind="primary"]:active {
+  transform: translateY(3px);
+  box-shadow: inset 0 3px 8px rgba(0,0,0,.4), 0 1px 0 #6C727A !important;
+}
+
 /* 滑块：银色立体手柄 */
 [data-testid="stSlider"] [role="slider"] {
   background: linear-gradient(180deg, #F2F4F7 0%%, #C0C6CD 100%%);
