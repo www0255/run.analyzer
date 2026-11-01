@@ -373,6 +373,24 @@ def convert_screenshots(payloads: list) -> tuple:
     return ocr_convert.records_to_frame(records), notes, failures
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def get_engine_diagnostics() -> dict:
+    """环境自检结果缓存 10 分钟：单纯 rerun（拖滑块等）不必重建引擎。"""
+    return ocr_convert.engine_diagnostics()
+
+
+def render_engine_diagnostics() -> None:
+    """可折叠的环境自检：让线上把「OCR 不可用」的真实原因自己说出来（不联网、绝不抛异常）。"""
+    with st.expander("🔧 环境自检（识别引擎状态）", expanded=False):
+        try:
+            diagnostics = get_engine_diagnostics()
+        except Exception as exc:  # noqa: BLE001 - 自检自身失败也不许影响主流程
+            st.caption("自检执行失败：{0}: {1}".format(type(exc).__name__, exc))
+            return
+        st.dataframe(pd.DataFrame(diagnostics["rows"]), hide_index=True)
+        st.markdown("**结论：{0}**".format(diagnostics["verdict"]))
+
+
 def render_screenshot_entry(settings: dict):
     """主入口：上传截图 -> 离线/视觉识别 -> 人工校正 -> 导出 CSV 或接入分析。"""
     st.subheader("📷 上传跑步记录截图（PNG/JPG）")
@@ -382,6 +400,7 @@ def render_screenshot_entry(settings: dict):
         accept_multiple_files=True,
         key="screenshot_uploader",
     )
+    render_engine_diagnostics()
     if not uploaded:
         st.caption("支持跑步 App 的「运动记录详情页」截图。识别后请先在表格里核对，再点「用这份数据开始分析」。")
         return None

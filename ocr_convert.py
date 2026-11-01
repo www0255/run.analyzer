@@ -107,18 +107,60 @@ def get_engine():
         from rapidocr_onnxruntime import RapidOCR  # 惰性导入：装在函数内
     except ImportError as exc:
         raise OcrDependencyError(
-            "未安装离线 OCR 依赖 rapidocr-onnxruntime，请执行 pip install -r requirements.txt 后重启应用"
+            "离线 OCR 依赖导入失败（{0}）：{1} ｜ 若在 Debian/Ubuntu，请确认 packages.txt 的"
+            " libgl1 / libglib2.0-0 / libgomp1 已生效".format(type(exc).__name__, str(exc)[:200])
         ) from exc
     try:
         _ENGINE = RapidOCR()
     except Exception as exc:  # noqa: BLE001 - onnxruntime/模型缺失都归为依赖问题
         logger.warning("RapidOCR 初始化失败: error=%s", type(exc).__name__)
         raise OcrDependencyError(
-            "离线 OCR 引擎初始化失败（{0}），请确认 onnxruntime 与模型文件完整".format(type(exc).__name__)
+            "离线 OCR 引擎初始化失败（{0}）：{1}".format(type(exc).__name__, str(exc)[:200])
         ) from exc
     logger.info("离线 OCR 引擎已加载: engine=RapidOCR")
     return _ENGINE
 
+
+def _diag_exc(exc) -> str:
+    return ("{0}: {1}".format(type(exc).__name__, exc))[:200]
+
+
+def engine_diagnostics() -> dict:
+    """环境自检：逐项独立 try/except，绝不抛异常，也不发任何网络请求。"""
+    import platform, sys
+    rows, status = [], {}
+
+    def add(item, detail, ok):
+        rows.append({"项目": item, "状态": "可用" if ok else "不可用", "详情": str(detail)[:200]})
+
+    def probe(key, label, func):
+        try:
+            detail, status[key] = func(), True
+        except Exception as exc:  # noqa: BLE001 - 每项独立，一项崩溃不影响其他项
+            detail, status[key] = _diag_exc(exc), False
+        add(label, detail, status[key])
+
+    def version_of(name):
+        return "版本 " + str(getattr(importlib.import_module(name), "__version__", "未知"))
+
+    def rapidocr_class():
+        from rapidocr_onnxruntime import RapidOCR  # noqa: F401 - 只验证导入链本身
+        return "RapidOCR 类可导入"
+
+    def engine_detail():
+        get_engine()  # 失败抛 OcrDependencyError，消息里已带原始异常文本
+        return "模型加载成功"
+
+    probe("cv2", "cv2 (OpenCV) 导入", lambda: version_of("cv2"))
+    probe("onnxruntime", "onnxruntime 导入", lambda: version_of("onnxruntime"))
+    probe("numpy", "numpy 导入", lambda: version_of("numpy"))
+    probe("rapidocr", "from rapidocr_onnxruntime import RapidOCR", rapidocr_class)
+    probe("engine", "RapidOCR() 构造", engine_detail)
+    probe("openai", "openai 导入（大模型识别）", lambda: version_of("openai"))
+    probe("platform", "运行平台", lambda: "{0} | Python {1} | Linux={2}".format(
+        platform.platform(), sys.version.split()[0], sys.platform.startswith("linux")))
+    verdict = "可离线识别" if status["engine"] else ("仅可用大模型识别" if status.get("openai") else "两者都不可用")
+    return {"rows": rows, "verdict": verdict}
 
 def decode_image(data: bytes):
     """解码为 BGR ndarray + (宽, 高)；RapidOCR 内部按 OpenCV 约定使用 BGR。"""

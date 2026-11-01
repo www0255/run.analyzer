@@ -188,12 +188,27 @@ def test_app_multi_image():
     print(frame.to_string(index=False))
 
 
+def test_diagnostics():
+    """环境自检必须在任何依赖状态下都不抛异常（云端缺 libGL 时靠它自证原因）。"""
+    print("[8] 环境自检 engine_diagnostics（不抛异常 + 表格形状）")
+    diagnostics = ocr.engine_diagnostics()
+    rows = diagnostics["rows"]
+    check("自检行数", len(rows), 7)
+    check("每行只有 项目/状态/详情 且详情≤200字",
+          all(set(row) == {"项目", "状态", "详情"} and len(row["详情"]) <= 200 for row in rows), True)
+    check("结论在合法取值内",
+          diagnostics["verdict"] in ("可离线识别", "仅可用大模型识别", "两者都不可用"), True)
+    for row in rows:
+        print("  {0} | {1} | {2}".format(row["项目"], row["状态"], row["详情"]))
+
+
 if __name__ == "__main__":
     test_offline_no_socket()
     test_parsers()
     test_label_anchoring()
     test_real_images()
     test_app_multi_image()
+    test_diagnostics()
     print("=" * 60)
     if FAILED:
         print("FAILED 项:", FAILED)
