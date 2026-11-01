@@ -273,15 +273,15 @@ def preview_frame(df: pd.DataFrame) -> pd.DataFrame:
     return view
 
 
-def render_stat_grid(items: list, per_row: int = 2) -> None:
-    """四方图：一块立体卡片里按网格排布指标，格间用十字分隔线。"""
-    cells = "".join(
-        '<div class="ra-cell"><div class="ra-cell-label">{0}</div>'
-        '<div class="ra-cell-value">{1}</div></div>'.format(label, value)
+def render_stat_table(items: list) -> None:
+    """汇总统计：指标 / 数值两列表格，数值右对齐并等宽，读法与上方数据预览一致。"""
+    rows = "".join(
+        "<tr><th scope='row'>{0}</th><td>{1}</td></tr>".format(label, value)
         for label, value in items
     )
     st.markdown(
-        '<div class="ra-grid ra-cols-{0}">{1}</div>'.format(per_row, cells),
+        '<table class="ra-stats"><thead><tr><th>指标</th><th>数值</th></tr></thead>'
+        "<tbody>{0}</tbody></table>".format(rows),
         unsafe_allow_html=True,
     )
 
@@ -334,20 +334,22 @@ def render_general_charts(df: pd.DataFrame) -> None:
     columns = st.columns(len(specs))
     for container, (column, title, accent) in zip(columns, specs):
         with container:
-            figure = px.line(df, x="日期", y=column, markers=True, title=title)
+            st.markdown(
+                '<div class="ra-fig-label">{0}</div>'.format(title),
+                unsafe_allow_html=True,
+            )
+            figure = px.line(df, x="日期", y=column, markers=True)
             render_figure(theme.style_figure(figure, accent=accent, height=300))
     if not has_heart_rate(df):
         st.caption("该数据没有心率列，心率趋势图已跳过。")
 
 
 def render_police_chart(df: pd.DataFrame, goal_seconds: int) -> None:
-    figure = px.line(
-        df,
-        x="日期",
-        y="1000米用时(秒)",
-        markers=True,
-        title="1000 米折算用时趋势（数值越小越快）",
+    st.markdown(
+        '<div class="ra-fig-label">1000 米折算用时趋势（数值越小越快）</div>',
+        unsafe_allow_html=True,
     )
+    figure = px.line(df, x="日期", y="1000米用时(秒)", markers=True)
     theme.style_figure(figure, accent=theme.SILVER, height=320)
     figure.add_hline(
         y=goal_seconds,
@@ -361,7 +363,7 @@ def render_police_chart(df: pd.DataFrame, goal_seconds: int) -> None:
 
 def render_stats(df: pd.DataFrame, mode: str, goal_seconds: int) -> None:
     heart_rate_text = "{0:.0f}".format(df[HEART_RATE_COLUMN].mean()) if has_heart_rate(df) else "—"
-    render_stat_grid([
+    render_stat_table([
         ("跑步次数", "{0}".format(len(df))),
         ("累计里程 km", "{0:.2f}".format(df["里程(km)"].sum())),
         ("平均配速 min/km", "{0:.2f}".format(df["配速(min/km)"].mean())),
@@ -372,11 +374,11 @@ def render_stats(df: pd.DataFrame, mode: str, goal_seconds: int) -> None:
         times = df["1000米用时(秒)"]
         best = float(times.min())
         gap = best - goal_seconds
-        render_stat_grid([
+        render_stat_table([
             ("最好折算 1000 米", format_seconds(best)),
             ("参考目标线（可自行设置）", format_seconds(goal_seconds)),
             ("与参考目标线的差距", "{0} {1}".format(format_seconds(abs(gap)), "落后" if gap > 0 else "领先")),
-        ], per_row=3)
+        ])
 
 
 def build_stats_text(df: pd.DataFrame, mode: str, goal_seconds: int) -> str:

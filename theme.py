@@ -36,7 +36,10 @@ _CSS = """
   --ra-silver: %(silver)s; --ra-steel: %(steel)s;
 }
 .stApp { background: var(--ra-bg); }
-.block-container { padding-top: 2.0rem; padding-bottom: 3rem; max-width: 1180px; }
+.block-container {
+  padding-top: 4.6rem; padding-bottom: 3.4rem;
+  max-width: clamp(720px, 90vw, 1240px);
+}
 html, body, [class*="css"] { font-family: %(font)s; }
 
 /* 侧边栏：再深一档 + 1px 竖线 */
@@ -213,32 +216,35 @@ h3, [data-testid="stMarkdownContainer"] h3 {
 }
 [data-testid="stExpander"] summary:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 2px 0 #0A0B0D, 0 6px 14px rgba(0,0,0,.4); }
 
-/* ===== 四方图：一块立体卡片 + 十字分隔 ===== */
-.ra-grid {
-  display: grid; border: 1px solid #34373C; border-radius: 14px; overflow: hidden;
-  background: linear-gradient(180deg, #1C1E22 0%%, #141619 100%%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 10px 26px rgba(0,0,0,.45);
-  margin: 6px 0 4px;
+/* ===== 汇总统计：真表格（指标 / 数值两列，与上方数据预览同一读法） ===== */
+.ra-stats {
+  width: 100%%; border-collapse: separate; border-spacing: 0; margin: 6px 0 20px;
+  border: 1px solid rgba(255,255,255,.09); border-radius: 14px; overflow: hidden;
+  background: linear-gradient(180deg, rgba(36,39,44,.58) 0%%, rgba(18,20,23,.58) 100%%);
+  backdrop-filter: blur(18px) saturate(124%%);
+  -webkit-backdrop-filter: blur(18px) saturate(124%%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.075), 0 20px 48px -22px rgba(0,0,0,.8);
 }
-.ra-cols-2 { grid-template-columns: repeat(2, 1fr); }
-.ra-cols-3 { grid-template-columns: repeat(3, 1fr); }
-.ra-cell {
-  padding: 16px 18px 14px;
-  border-right: 1px solid #262A2F; border-bottom: 1px solid #262A2F;
+.ra-stats thead th {
+  padding: 10px 18px; text-align: left;
+  font-size: .68rem; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--ra-muted); background: rgba(255,255,255,.045);
+  border-bottom: 1px solid rgba(255,255,255,.085);
 }
-.ra-cols-2 .ra-cell:nth-child(2n) { border-right: none; }
-.ra-cols-2 .ra-cell:nth-last-child(-n+2) { border-bottom: none; }
-.ra-cols-3 .ra-cell:nth-child(3n) { border-right: none; }
-.ra-cols-3 .ra-cell:nth-last-child(-n+3) { border-bottom: none; }
-.ra-cell-label {
-  font-size: .68rem; letter-spacing: 1.2px; text-transform: uppercase;
-  color: var(--ra-muted); margin-bottom: 6px;
+.ra-stats thead th:last-child { text-align: right; }
+.ra-stats tbody th {
+  width: 52%%; padding: 12px 18px; text-align: left; font-weight: 500; color: #C6CAD0;
+  border-bottom: 1px solid rgba(255,255,255,.06);
 }
-.ra-cell-value {
+.ra-stats tbody td {
+  padding: 12px 18px; text-align: right; border-left: 1px solid rgba(255,255,255,.06);
+  border-bottom: 1px solid rgba(255,255,255,.06);
   font-family: %(mono)s; font-variant-numeric: tabular-nums;
-  font-size: 1.72rem; font-weight: 700; letter-spacing: -0.6px; color: #F5F6F8;
-  text-shadow: 0 1px 0 #9BA1A8, 0 2px 6px rgba(0,0,0,.6);
+  font-size: 1.05rem; font-weight: 700; letter-spacing: -0.2px; color: #F3F5F7;
 }
+.ra-stats tbody tr:last-child th, .ra-stats tbody tr:last-child td { border-bottom: none; }
+.ra-stats tbody tr { transition: background .2s ease; }
+.ra-stats tbody tr:hover { background: rgba(255,255,255,.035); }
 
 /* ===== 按钮：加大立体感（兼容 Streamlit 新版 data-testid 结构） ===== */
 [data-testid="stButton"] button, [data-testid="stDownloadButton"] button,
@@ -278,6 +284,66 @@ h3, [data-testid="stMarkdownContainer"] h3 {
   background: linear-gradient(180deg, #F2F4F7 0%%, #C0C6CD 100%%);
   border: 1px solid #7E848C;
   box-shadow: inset 0 1px 0 #FFFFFF, 0 2px 5px rgba(0,0,0,.6);
+}
+/* ===== 质感层：玻璃面 + 流体布局 + 弹性微交互 + 氛围视差 ===== */
+.stApp {
+  background-color: var(--ra-bg);
+  background-image:
+    radial-gradient(42%% 34%% at 12%% 6%%, rgba(108,129,153,.26), transparent 68%%),
+    radial-gradient(38%% 30%% at 88%% 18%%, rgba(211,215,221,.10), transparent 70%%),
+    radial-gradient(52%% 46%% at 58%% 96%%, rgba(70,78,90,.30), transparent 72%%);
+  background-repeat: no-repeat; background-attachment: fixed;
+  animation: ra-ambience 46s ease-in-out infinite alternate;
+}
+@keyframes ra-ambience {
+  from { background-position: 0%% 0%%, 100%% 6%%, 50%% 100%%; }
+  to   { background-position: 7%% 5%%, 90%% 14%%, 42%% 94%%; }
+}
+.ra-title { font-size: clamp(1.9rem, 4.2vw, 2.85rem); }
+.ra-kicker { margin: 2px 0 0; }
+.ra-fig-label {
+  font-size: .8rem; font-weight: 650; letter-spacing: .2px;
+  color: #B3B8BF; margin: 2px 0 4px; transition: color .25s ease;
+}
+.ra-fig-label:hover { color: #E7E9EC; }
+
+.ra-hero, [data-testid="stExpander"], [data-testid="stAlertContainer"],
+[data-testid="stFileUploaderDropzone"], [data-testid="stDataFrame"], [data-testid="stTable"] {
+  background: linear-gradient(180deg, rgba(40,43,48,.58) 0%%, rgba(18,20,23,.58) 100%%) !important;
+  backdrop-filter: blur(18px) saturate(124%%);
+  -webkit-backdrop-filter: blur(18px) saturate(124%%);
+  border: 1px solid rgba(255,255,255,.075) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.075), 0 20px 48px -22px rgba(0,0,0,.8);
+}
+.ra-hero {
+  padding: 18px 22px 16px; border-radius: 16px; margin-bottom: 24px;
+  animation: ra-rise .62s cubic-bezier(.34,1.56,.64,1) both;
+  transition: border-color .3s ease, box-shadow .35s ease,
+              transform .35s cubic-bezier(.34,1.56,.64,1);
+}
+.ra-hero:hover {
+  transform: translateY(-2px); border-color: rgba(211,215,221,.2) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 30px 64px -24px rgba(0,0,0,.88);
+}
+@keyframes ra-rise {
+  from { opacity: 0; transform: translateY(10px) scale(.995); }
+  to   { opacity: 1; transform: none; }
+}
+[data-testid="stExpander"], [data-testid="stDataFrame"], [data-testid="stAlertContainer"] {
+  transition: transform .32s cubic-bezier(.34,1.56,.64,1), border-color .25s ease,
+              box-shadow .3s ease;
+}
+[data-testid="stExpander"]:hover, [data-testid="stDataFrame"]:hover,
+[data-testid="stAlertContainer"]:hover {
+  transform: translateY(-2px); border-color: rgba(211,215,221,.2) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stApp, .ra-hero, [data-testid="stExpander"], [data-testid="stDataFrame"],
+  [data-testid="stAlertContainer"], .ra-stats tbody tr {
+    animation: none !important; transition: none !important;
+  }
+  .ra-hero:hover, [data-testid="stExpander"]:hover, [data-testid="stDataFrame"]:hover,
+  [data-testid="stAlertContainer"]:hover { transform: none; }
 }
 </style>
 """ % {
