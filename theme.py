@@ -10,6 +10,8 @@
 import streamlit as st
 import plotly.graph_objects as go
 
+import space_bg
+
 # ---------- 中性灰调色板 ----------
 BG = "#0D0E10"            # 页面底色（近黑）
 SURFACE = "#161719"       # 卡片
@@ -286,7 +288,12 @@ h3, [data-testid="stMarkdownContainer"] h3 {
   box-shadow: inset 0 1px 0 #FFFFFF, 0 2px 5px rgba(0,0,0,.6);
 }
 /* ===== 质感层：玻璃面 + 流体布局 + 弹性微交互 + 氛围视差 ===== */
-.stApp {
+/* 底色与氛围渐变挂到 html/body：three.js 那一层用 z-index:-1 贴在它们之上、内容之下，
+   所以 .stApp / .stAppViewContainer 必须透明，否则会把画布整块盖住。 */
+.stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"], .main {
+  background: transparent !important;
+}
+html, body {
   background-color: var(--ra-bg);
   background-image:
     radial-gradient(42%% 34%% at 12%% 6%%, rgba(108,129,153,.26), transparent 68%%),
@@ -345,6 +352,24 @@ h3, [data-testid="stMarkdownContainer"] h3 {
   .ra-hero:hover, [data-testid="stExpander"]:hover, [data-testid="stDataFrame"]:hover,
   [data-testid="stAlertContainer"]:hover { transform: none; }
 }
+/* ===== 空间背景层：three.js 组件 iframe 钉成全屏底层，内容压在它上面 ===== */
+iframe.stIFrame, iframe[title="st.iframe"], iframe[title="st.components.v1.html"] {
+  position: fixed !important; inset: 0 !important;
+  width: 100vw !important; height: 100vh !important;
+  border: 0 !important; display: block !important;
+  background: transparent !important;
+  pointer-events: none !important; z-index: -1 !important;
+}
+[data-testid="stCustomComponentV1"], [data-testid="stElementContainer"]:has(iframe.stIFrame) {
+  height: 0 !important; overflow: visible !important; position: static !important;
+}
+[data-testid="stSidebar"] {
+  position: relative; z-index: 5 !important;
+  background: rgba(11,12,14,.78) !important;
+  backdrop-filter: blur(14px) saturate(112%%);
+  border-right: 1px solid rgba(255,255,255,.06);
+}
+[data-testid="stHeader"] { z-index: 6 !important; }
 </style>
 """ % {
     "bg": BG, "surface": SURFACE, "surface_alt": SURFACE_ALT, "border": BORDER,
@@ -409,3 +434,19 @@ def style_figure(figure, accent: str = SILVER, height: int = 300, smooth: bool =
         hovertemplate="%{x|%m-%d}　%{y:.2f}<extra></extra>",
     )
     return figure
+
+def render_space_background(enabled: bool, interactive: bool = False) -> None:
+    """固定背景层：three.js 粒子场 + shader 渐变。
+
+    enabled=False 时整层不渲染，页面退回纯 CSS 氛围。
+    interactive=True 时画布仍留在最底层且不截获指针，拖动监听挂在父页面 document 上，
+    所以正文照常可见可点，同时整页都能拖动视角。
+    """
+    if not enabled:
+        return
+    if interactive:
+        st.markdown(
+            "<style>body { cursor: grab; } body:active { cursor: grabbing; }</style>",
+            unsafe_allow_html=True,
+        )
+    space_bg.render(interactive=interactive)

@@ -52,8 +52,21 @@
 ## 4. 技术与 AI 使用
 
 - 技术栈：Python 3 · Streamlit · pandas · Plotly · OpenAI 兼容 SDK（`openai`）
+- 视觉层：three.js（粒子场 + shader 渐变，`space_bg.html` / `space_bg.py`）＋ Tailwind CSS（仅用于自建组件内部）＋ 手写 CSS 玻璃质感（`theme.py`）
 - OCR：`rapidocr-onnxruntime`（版本按 Python 版本分别钉死，见 `requirements.txt`）
 - 部署：Streamlit Community Cloud / 本地 / Docker
+
+**前端分层（为什么 Streamlit 里还能有 3D 背景）**
+
+Streamlit 的 DOM 由它自己的 React 渲染，整站换前端框架不现实；这里的做法是**外壳不动、只加一层背景**：
+
+| 层 | 实现 | 关键约束 |
+| --- | --- | --- |
+| 底色与氛围 | CSS radial-gradient 挂在 `html, body` | `.stApp` 等外壳强制透明，否则会整块盖住画布 |
+| 3D 空间背景 | `st.components.v1.html` 里的 three.js 画布，`position:fixed` + `z-index:-1` | 不截获指针、不遮挡正文；侧边栏单独抬到上层 |
+| 内容 | Streamlit 原生组件 + 玻璃卡 CSS | 无需改动任何业务逻辑 |
+
+性能与可访问性：帧率上限 30fps，检测到 `prefers-reduced-motion` 时降到 4fps 慢巡航而不是彻底静止；页面切到后台自动暂停；移动端（<900px）粒子数减半；WebGL 不可用时画布整层退化为 CSS 氛围。侧边栏提供「启用 3D 空间背景」开关与探索模式（拖动旋转视角），可随时关闭回到静态页面。
 - 数据警务视角：作品本质是一条数据链路——**采集 → 清洗校验 → 指标折算 → 结论与决策建议**
 
 ### AI 使用声明（A 类）

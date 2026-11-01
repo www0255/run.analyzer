@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="https://cdn.tailwindcss.com/3.4.1"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  #ra-space { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+  /* Tailwind CDN 若被网络拦下，这几个绝对定位仍保证 HUD 不压到正文 */
+  #ra-hud, #ra-hint { position: fixed; bottom: 12px; z-index: 2; }
+  #ra-hud { right: 16px; }
+  #ra-hint { left: 16px; }
+  #ra-scrim { position: fixed; inset: 0; }
+</style>
+</head>
+<body class="antialiased">
+<canvas id="ra-space"></canvas>
+<div id="ra-scrim" class="pointer-events-none fixed inset-0"
+     style="background: radial-gradient(120% 90% at 22% 8%, rgba(13,14,16,.30), rgba(13,14,16,.44) 62%, rgba(13,14,16,.52) 100%);"></div>
+<div id="ra-hud"
+     class="pointer-events-none fixed bottom-3 right-4 select-none rounded-full border border-white/10 bg-black/25 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/40 backdrop-blur-md">
+  <span id="ra-hud-text">space</span>
+</div>
+<div id="ra-hint"
+     class="pointer-events-none fixed bottom-3 left-4 hidden select-none rounded-full border border-white/10 bg-black/30 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/55 backdrop-blur-md">
+  drag to look around
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  var INTERACTIVE = __INTERACTIVE__;
+  var hudText = document.getElementById('ra-hud-text');
+  var hint = document.getElementById('ra-hint');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (!window.THREE) { hudText.textContent = 'webgl off'; return; }
+
+  var canvas = document.getElementById('ra-space');
+  var renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, alpha: true, powerPreference: 'low-power' });
+  } catch (e) { hudText.textContent = 'webgl off'; return; }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+
+  // 层 1：shader 渐变（全屏 quad，正交相机单独一画）
+  var gradScene = new THREE.Scene();
+  var gradCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  var gradUniforms = { uRes: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 } };
+  var gradMat = new THREE.ShaderMaterial({
+    uniforms: gradUniforms,
+    depthTest: false,
+    depthWrite: false,
+    vertexShader: [
+      'varying vec2 vUv;',
+      'void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }'
+    ].join('\n'),
+    fragmentShader: [
+      'precision highp float;',
+      'varying vec2 vUv;',
+      'uniform vec2 uRes;',
+      'uniform float uTime;',
+      'float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }',
+      'void main(){',
+      '  vec2 p = vUv * vec2(uRes.x / max(uRes.y, 1.0), 1.0);',
+      '  float t = uTime * 0.035;',
+      '  float a = 0.0;',
+      '  a += smoothstep(0.95, 0.0, distance(p, vec2(0.28 + 0.20 * sin(t), 0.68 + 0.12 * cos(t * 0.8)))) * 0.55;',
+      '  a += smoothstep(0.80, 0.0, distance(p, vec2(0.82 + 0.14 * cos(t * 0.7), 0.30 + 0.16 * sin(t * 0.9)))) * 0.40;',
+      '  a += smoothstep(1.15, 0.0, distance(p, vec2(0.55 + 0.22 * sin(t * 0.5), 0.92 + 0.10 * cos(t * 0.6)))) * 0.28;',
+      '  vec3 col = vec3(0.043, 0.047, 0.055) + vec3(0.34, 0.44, 0.58) * a * 0.5;',
+      '  col += vec3(hash(vUv * uRes.xy + t) * 0.018 - 0.009);',
+      '  gl_FragColor = vec4(col, 1.0);',
+      '}'
+    ].join('\n')
+  });
+  gradScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), gradMat));
+
+  // 层 2：粒子场（近/远两层，做深度与视差）
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(58, 1, 0.1, 140);
+  camera.position.set(0, 0, 20);
+
+  // 用一张径向渐变贴图把方块点变成柔光粒子
+  function makeSprite() {
+    var c = document.createElement('canvas');
+    c.width = c.height = 64;
+    var ctx = c.getContext('2d');
+    var g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.45, 'rgba(255,255,255,.55)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+    var tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    return tex;
+  }
+  var sprite = makeSprite();
+
+  function makeField(count, spread, size, opacity, color) {
+    var pos = new Float32Array(count * 3);
+    for (var i = 0; i < count; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * spread.x;
+      pos[i * 3 + 1] = (Math.random() - 0.5) * spread.y;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * spread.z;
+    }
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    var mat = new THREE.PointsMaterial({
+      color: color, size: size, sizeAttenuation: true, transparent: true,
+      opacity: opacity, depthWrite: false, blending: THREE.AdditiveBlending,
+      map: sprite, alphaTest: 0.01
+    });
+    return new THREE.Points(geo, mat);
+  }
+
+  var narrow = window.innerWidth < 900;
+  var near = makeField(narrow ? 900 : 1500, { x: 46, y: 30, z: 34 }, 0.15, 0.34, 0xaebccd);
+  var far = makeField(narrow ? 300 : 520, { x: 70, y: 46, z: 60 }, 0.09, 0.20, 0x8a99ab);
+  scene.add(near, far);
+  scene.rotation.z = 0.12;
+
+  // 探索模式：画布始终留在最底层、不截获指针；把拖动监听到父页面上，
+  // 这样正文照常可见可点，同时整页都能拖动视角。
+  var drag = { active: false, x: 0, y: 0, tx: 0, ty: 0 };
+  var dragReady = false;
+  if (INTERACTIVE) {
+    var host = null;
+    try {
+      if (window.parent && window.parent !== window && window.parent.document.body) host = window.parent.document;
+    } catch (e) { host = null; }
+    if (host) {
+      var skip = function (el) {
+        try {
+          return !!(el && el.closest && el.closest('[data-testid="stSidebar"], input, select, textarea, button, [role="slider"]'));
+        } catch (e) { return false; }
+      };
+      dragReady = true;
+      console.log('[space] parent drag attached');
+      host.addEventListener('pointerdown', function (e) {
+        if (skip(e.target)) return;
+        drag.active = true; drag.x = e.clientX; drag.y = e.clientY;
+      });
+      host.addEventListener('pointerup', function () { drag.active = false; });
+      host.addEventListener('pointercancel', function () { drag.active = false; });
+      host.addEventListener('pointermove', function (e) {
+        var w = window.innerWidth || 1280, h = window.innerHeight || 800;
+        if (!drag.active) {
+          drag.tx = (e.clientX / w - 0.5) * 0.5;
+          drag.ty = (e.clientY / h - 0.5) * 0.3;
+          return;
+        }
+        drag.tx += ((e.clientX - drag.x) / w) * 1.6;
+        drag.ty += ((e.clientY - drag.y) / h) * 1.0;
+        drag.x = e.clientX; drag.y = e.clientY;
+      });
+    }
+  }
+
+  function resize() {
+    var w = window.innerWidth, h = window.innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / Math.max(h, 1);
+    camera.updateProjectionMatrix();
+    gradUniforms.uRes.value.set(w, h);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  var FRAME_MS = 1000 / (reduce ? 4 : 30);
+  var lastDraw = 0, elapsed = 0, frames = 0, fpsMark = 0, running = true;
+
+  function draw(now) {
+    var dt = lastDraw ? now - lastDraw : 0;
+    lastDraw = now;
+    elapsed += dt / 1000;
+
+    var look = INTERACTIVE ? 1 : 0.45;
+    drag.ty = Math.max(-0.9, Math.min(0.9, drag.ty));
+    camera.position.x = Math.sin(elapsed * 0.07) * 1.8 + drag.tx * 4 * look;
+    camera.position.y = Math.cos(elapsed * 0.055) * 1.1 - drag.ty * 4 * look;
+    camera.position.z = 20 + Math.sin(elapsed * 0.04) * 1.2;
+    camera.lookAt(0, 0, 0);
+
+    near.rotation.y = elapsed * 0.012;
+    near.rotation.x = Math.sin(elapsed * 0.05) * 0.05;
+    far.rotation.y = -elapsed * 0.007;
+    far.rotation.x = Math.cos(elapsed * 0.04) * 0.04;
+
+    gradUniforms.uTime.value = elapsed;
+
+    renderer.autoClear = false;
+    renderer.clear();
+    renderer.render(gradScene, gradCam);
+    renderer.render(scene, camera);
+
+    frames++;
+    if (now - fpsMark > 1000) {
+      hudText.textContent = (INTERACTIVE ? (dragReady ? 'explore · drag' : 'explore · n/a') : 'space') + ' · ' + frames + 'fps';
+      frames = 0; fpsMark = now;
+    }
+  }
+
+  function loop(now) {
+    if (!running) return;
+    requestAnimationFrame(loop);
+    if (now - lastDraw < FRAME_MS - 1) return;
+    draw(now);
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    running = !document.hidden;
+    if (running) { lastDraw = 0; requestAnimationFrame(loop); }
+  });
+
+  fpsMark = performance.now();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

@@ -492,12 +492,24 @@ def render_sidebar() -> tuple:
         )
         st.caption("演示模式无需填写 API Key；也可写进 .streamlit/secrets.toml（内容不会显示、不会写日志）。")
 
+        st.markdown("---")
+        st.header("空间背景")
+        space_on = st.checkbox("启用 3D 空间背景（three.js）", value=True)
+        space_interactive = st.checkbox(
+            "探索模式：拖动旋转视角",
+            value=False,
+            help="开启后这一层接管鼠标，主内容暂时不可点击（侧边栏仍可用，随时关掉即可恢复）。",
+        )
+        st.caption("粒子场 + shader 渐变，30 帧上限，切到后台自动暂停；不拦截点击、不遮挡内容。")
+
     api_key = api_key_input or detected["api_key"]
     return mode, demo_mode, {
         "base_url": (base_url or DEFAULT_BASE_URL).strip(),
         "model_name": (model_name or DEFAULT_MODEL).strip(),
         "vision_model": (vision_model or model_name or DEFAULT_MODEL).strip(),
         "api_key": api_key,
+        "space_on": space_on,
+        "space_interactive": space_interactive,
     }
 
 
@@ -706,6 +718,7 @@ def main() -> None:
     theme.render_header()
 
     mode, demo_mode, settings = render_sidebar()
+    theme.render_space_background(settings["space_on"], settings["space_interactive"])
     logger.info("页面渲染: mode=%s demo_mode=%s", mode, demo_mode)
 
     demo_content = get_demo_analysis(mode)
