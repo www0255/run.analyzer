@@ -679,6 +679,37 @@ VISION_PROMPT = (
 )
 
 
+# 图片文件头 -> data URL 的 mime；上传可能是 png 也可能是 jpg，写错类型部分服务商会直接拒
+_MIME_SIGNATURES = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+)
+
+
+def detect_image_mime(data: bytes) -> str:
+    """按文件头判断图片类型，认不出时按 jpeg 处理（与历史行为一致）。"""
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    for signature, mime in _MIME_SIGNATURES:
+        if data[:len(signature)] == signature:
+            return mime
+    return "image/jpeg"
+
+
+def build_vision_messages(data: bytes) -> list:
+    """构造视觉请求的 messages：base64 内联，OpenAI 与 DeepSeek 视觉模型共用这一格式。"""
+    payload = "data:{0};base64,{1}".format(detect_image_mime(data), base64.b64encode(data).decode("ascii"))
+    return [{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": VISION_PROMPT},
+            {"type": "image_url", "image_url": {"url": payload}},
+        ],
+    }]
+
+
 def _parse_vision_csv(text: str) -> pd.DataFrame:
     from io import StringIO
 
@@ -700,8 +731,12 @@ def _parse_vision_csv(text: str) -> pd.DataFrame:
     return frame[COLUMNS]
 
 
-def vision_extract(data: bytes, base_url: str, model_name: str, api_key: str) -> tuple:
-    """返回 (DataFrame, 错误信息)；绝不外抛，也绝不打印 Key。"""
+def vision_extract(data: bytes, base_url: str, vision_model: str, api_key: str) -> tuple:
+    """返回 (DataFrame, 错误信息)；绝不外抛，也绝不打印 Key。
+
+    vision_model 与文本分析模型相互独立：DeepSeek 场景文本用 deepseek-chat、
+    截图识别用 deepseek-v4-flash-vision-exp。
+    """
     if not api_key:
         return None, "未填写 API Key，无法使用大模型识别"
     try:
@@ -709,20 +744,13 @@ def vision_extract(data: bytes, base_url: str, model_name: str, api_key: str) ->
     except ImportError:
         return None, "未安装 openai 依赖，请执行 pip install -r requirements.txt"
 
-    encoded = base64.b64encode(data).decode("ascii")
     started = time.perf_counter()
-    logger.info("视觉识别开始: base_url=%s model=%s", base_url, model_name)
+    logger.info("视觉识别开始: base_url=%s model=%s mime=%s", base_url, vision_model, detect_image_mime(data))
     try:
         client = OpenAI(api_key=api_key, base_url=base_url, timeout=60.0)
         response = client.chat.completions.create(
-            model=model_name,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": VISION_PROMPT},
-                    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + encoded}},
-                ],
-            }],
+            model=vision_model,
+            messages=build_vision_messages(data),
             timeout=60.0,
         )
         text = (response.choices[0].message.content or "").strip()
@@ -730,5 +758,5 @@ def vision_extract(data: bytes, base_url: str, model_name: str, api_key: str) ->
     except Exception as exc:  # noqa: BLE001 - 视觉引擎失败必须降级，不许崩
         logger.warning("视觉识别失败: error=%s detail=%s", type(exc).__name__, str(exc)[:200])
         return None, "大模型识别失败（{0}）：{1}".format(type(exc).__name__, str(exc)[:120])
-    logger.info("视觉识别成功: model=%s 行数=%d 耗时=%.2fs", model_name, len(frame), time.perf_counter() - started)
+    logger.info("视觉识别成功: model=%s 行数=%d 耗时=%.2fs", vision_model, len(frame), time.perf_counter() - started)
     return frame, ""

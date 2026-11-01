@@ -58,6 +58,39 @@ FALLBACK_ANALYSIS = (
 DEFAULT_GOAL_SECONDS = 270
 AI_TIMEOUT_SECONDS = 30.0
 
+DEFAULT_BASE_URL = "https://api.openai.com/v1"
+DEFAULT_MODEL = "gpt-4o-mini"
+SECRET_NAMES = ("AI_BASE_URL", "AI_MODEL", "VISION_MODEL", "AI_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY")
+SECRET_API_KEY_ORDER = ("AI_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY")
+
+PRESET_DEEPSEEK = "DeepSeek（推荐，便宜）"
+PRESET_OPENAI = "OpenAI"
+PRESET_CUSTOM = "自定义"
+WIDGET_BASE_URL = "ai_base_url"
+WIDGET_MODEL = "ai_model_name"
+WIDGET_VISION_MODEL = "ai_vision_model"
+WIDGET_API_KEY = "ai_api_key_input"
+WIDGET_PRESET = "ai_provider_preset"
+APPLIED_PRESET_KEY = "ai_applied_preset"
+
+# 预设只写这三个输入框的初值；API Key 永远不被预设触碰
+PROVIDER_PRESETS = {
+    PRESET_DEEPSEEK: {
+        WIDGET_BASE_URL: "https://api.deepseek.com",
+        WIDGET_MODEL: "deepseek-flash",
+        WIDGET_VISION_MODEL: "deepseek-flash",
+    },
+    PRESET_OPENAI: {
+        WIDGET_BASE_URL: "https://api.openai.com/v1",
+        WIDGET_MODEL: "gpt-4o-mini",
+        WIDGET_VISION_MODEL: "gpt-4o-mini",
+    },
+}
+
+# 明显不支持图片输入的模型名（子串匹配）；命中就只提示、绝不发请求
+UNSUPPORTED_VISION_TOKENS = ("deepseek-chat", "deepseek-reasoner", "gpt-3.5")
+DEEPSEEK_VISION_HINT = "deepseek-flash"
+
 
 @st.cache_data(show_spinner=False)
 def load_demo_analysis(path_str: str) -> str:
@@ -84,14 +117,61 @@ def get_demo_analysis(mode: str) -> str:
         return FALLBACK_ANALYSIS
 
 
-def get_secret_api_key() -> str:
-    """st.secrets 里配置的 OPENAI_API_KEY（未配置时返回空串）。"""
+def load_secret_store() -> dict:
+    """一次性读取 st.secrets 里与 AI 相关的项；没有 secrets.toml 时返回空 dict。"""
     try:
-        value = st.secrets.get("OPENAI_API_KEY", "")
+        values = {name: st.secrets.get(name, "") for name in SECRET_NAMES}
     except Exception as exc:  # noqa: BLE001 - 没有 secrets.toml 时访问 st.secrets 会抛错
         logger.info("未读取到 st.secrets: error=%s", type(exc).__name__)
-        return ""
-    return str(value or "")
+        return {}
+    return {name: str(value or "").strip() for name, value in values.items() if str(value or "").strip()}
+
+
+def provider_label(base_url: str) -> str:
+    """把 base_url 归到一个展示用服务商名（只用于界面与日志，不参与鉴权判断）。"""
+    lowered = (base_url or "").lower()
+    if "deepseek" in lowered:
+        return "DeepSeek"
+    if "openai" in lowered:
+        return "OpenAI"
+    return PRESET_CUSTOM
+
+
+def load_ai_config(store: dict = None) -> dict:
+    """按 AI_* > DEEPSEEK_API_KEY > OPENAI_API_KEY 的优先级解析配置。
+
+    Key 只放在返回值里供请求使用：不打印、不写日志、不回显到页面。
+    """
+    store = load_secret_store() if store is None else store
+    api_key, key_source = "", ""
+    for name in SECRET_API_KEY_ORDER:
+        if store.get(name):
+            api_key, key_source = store[name], name
+            break
+    config = {
+        "base_url": store.get("AI_BASE_URL") or DEFAULT_BASE_URL,
+        "model_name": store.get("AI_MODEL") or DEFAULT_MODEL,
+        "vision_model": store.get("VISION_MODEL") or store.get("AI_MODEL") or DEFAULT_MODEL,
+        "api_key": api_key,
+        "key_source": key_source,
+        "has_secret_key": bool(api_key),
+    }
+    if api_key:
+        logger.info(
+            "已从 st.secrets 检测到配置: 服务商=%s 模型=%s 视觉模型=%s key来源=%s",
+            provider_label(config["base_url"]), config["model_name"], config["vision_model"], key_source,
+        )
+    return config
+
+
+def vision_guard_message(vision_model: str) -> str:
+    """视觉模型能力守卫：明显不支持图片的模型直接拦下，不发请求。空串表示放行。"""
+    lowered = (vision_model or "").strip().lower()
+    if any(token in lowered for token in UNSUPPORTED_VISION_TOKENS):
+        return "当前视觉模型 {0} 不支持图片输入，DeepSeek 请用 {1}".format(
+            vision_model.strip(), DEEPSEEK_VISION_HINT
+        )
+    return ""
 
 
 def ensure_pace_duration(df: pd.DataFrame, notes: list) -> pd.DataFrame:
@@ -310,6 +390,28 @@ def call_ai(base_url: str, model_name: str, api_key: str, prompt: str, mode: str
     return text
 
 
+def seed_widget_defaults(detected: dict) -> None:
+    """首帧把 secrets 检测到的值填成输入框初值；之后用户键入的值永远优先。"""
+    for widget_key, value in (
+        (WIDGET_BASE_URL, detected["base_url"]),
+        (WIDGET_MODEL, detected["model_name"]),
+        (WIDGET_VISION_MODEL, detected["vision_model"]),
+    ):
+        st.session_state.setdefault(widget_key, value)
+
+
+def apply_provider_preset(preset: str) -> None:
+    """只在真正切换预设的那一次 rerun 改写三个输入框。
+
+    首帧只记录不覆盖：否则会把 secrets 里的自定义模型名冲掉。API Key 不在预设里，切来切去不丢。
+    """
+    previous = st.session_state.get(APPLIED_PRESET_KEY)
+    st.session_state[APPLIED_PRESET_KEY] = preset
+    if previous is None or preset == previous or preset not in PROVIDER_PRESETS:
+        return
+    st.session_state.update(PROVIDER_PRESETS[preset])
+
+
 def render_sidebar() -> tuple:
     with st.sidebar:
         st.header("⚙️ 分析模式")
@@ -318,17 +420,40 @@ def render_sidebar() -> tuple:
 
         st.markdown("---")
         st.header("🤖 AI 设置")
-        secret_key = get_secret_api_key()
-        base_url = st.text_input("Base URL", value="https://api.openai.com/v1")
-        model_name = st.text_input("模型名称", value="gpt-4o-mini")
-        api_key_input = st.text_input("API Key", type="password", placeholder="仅真实 AI 模式需要")
-        if secret_key:
-            st.caption("已检测到 st.secrets 中的 OPENAI_API_KEY，真实模式将默认使用它。")
-        else:
-            st.caption("演示模式无需填写 API Key。")
+        detected = load_ai_config()
 
-    api_key = api_key_input or secret_key
-    return mode, demo_mode, {"base_url": base_url.strip(), "model_name": model_name.strip(), "api_key": api_key}
+        preset_options = list(PROVIDER_PRESETS) + [PRESET_CUSTOM]
+        detected_label = provider_label(detected["base_url"]) if detected["has_secret_key"] else PRESET_CUSTOM
+        preset = st.selectbox(
+            "服务商预设",
+            preset_options,
+            index=preset_options.index(detected_label if detected_label in preset_options else PRESET_CUSTOM),
+            key=WIDGET_PRESET,
+        )
+        apply_provider_preset(preset)
+        seed_widget_defaults(detected)
+
+        base_url = st.text_input("Base URL", key=WIDGET_BASE_URL)
+        model_name = st.text_input("模型名称（文本分析）", key=WIDGET_MODEL)
+        vision_model = st.text_input("视觉模型（截图识别）", key=WIDGET_VISION_MODEL)
+        if detected["has_secret_key"]:
+            st.caption(
+                "已从 Secrets 检测到配置（服务商: {0} / 模型: {1}），真实模式默认使用它；下方手动填写仍然优先。".format(
+                    provider_label(detected["base_url"]), detected["model_name"]
+                )
+            )
+        api_key_input = st.text_input(
+            "API Key", type="password", key=WIDGET_API_KEY, placeholder="仅真实 AI 模式需要"
+        )
+        st.caption("演示模式无需填写 API Key；也可写进 .streamlit/secrets.toml（内容不会显示、不会写日志）。")
+
+    api_key = api_key_input or detected["api_key"]
+    return mode, demo_mode, {
+        "base_url": (base_url or DEFAULT_BASE_URL).strip(),
+        "model_name": (model_name or DEFAULT_MODEL).strip(),
+        "vision_model": (vision_model or model_name or DEFAULT_MODEL).strip(),
+        "api_key": api_key,
+    }
 
 
 def read_input_source():
@@ -420,22 +545,28 @@ def render_screenshot_entry(settings: dict):
     for note in st.session_state.get(SCREENSHOT_NOTES) or []:
         st.info(note)
 
+    vision_model = (settings.get("vision_model") or settings.get("model_name") or "").strip()
+    st.caption("当前视觉模型：{0}".format(vision_model or "未设置"))
     if st.button("🤖 用大模型识别（更准，需联网）", key="vision_button"):
-        rows, messages = [], []
-        for index, (name, data) in enumerate(payloads, start=1):
-            vision_frame, vision_error = ocr_convert.vision_extract(
-                data, settings["base_url"], settings["model_name"], settings["api_key"]
-            )
-            if vision_frame is None:
-                messages.append("第 {0} 张（{1}）：{2}".format(index, name, vision_error))
-            else:
-                rows.append(vision_frame)
-        if rows:
-            st.session_state[SCREENSHOT_FRAME] = pd.concat(rows, ignore_index=True)[ocr_convert.COLUMNS]
-            st.session_state.pop(EDITOR_KEY, None)      # 换引擎后丢弃旧表格编辑态
-            st.success("大模型识别完成，请在下面的表格里继续核对。")
-        for message in messages:
-            st.warning(message)
+        guard_message = vision_guard_message(vision_model)
+        if guard_message:
+            st.warning(guard_message)      # 模型能力不够就只提示，连请求都不发
+        else:
+            rows, messages = [], []
+            for index, (name, data) in enumerate(payloads, start=1):
+                vision_frame, vision_error = ocr_convert.vision_extract(
+                    data, settings["base_url"], vision_model, settings["api_key"]
+                )
+                if vision_frame is None:
+                    messages.append("第 {0} 张（{1}）：{2}".format(index, name, vision_error))
+                else:
+                    rows.append(vision_frame)
+            if rows:
+                st.session_state[SCREENSHOT_FRAME] = pd.concat(rows, ignore_index=True)[ocr_convert.COLUMNS]
+                st.session_state.pop(EDITOR_KEY, None)      # 换引擎后丢弃旧表格编辑态
+                st.success("大模型识别完成，请在下面的表格里继续核对。")
+            for message in messages:
+                st.warning(message)
 
     st.warning("OCR 可能出错，请核对后再使用：表格可以直接改，也可以增删行。")
     edited = st.data_editor(

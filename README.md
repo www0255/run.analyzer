@@ -51,7 +51,7 @@ Run Analyzer 把这三件事收进一个网页：传表 → 出结论 → 出方
 - 真实 AI 模式：用户自行填写 Base URL / 模型名 / API Key（password 输入框，不落库、不打印），走 OpenAI 兼容 `chat.completions`，请求超时 30 秒。
 - 健壮性：网络失败、401、超时等任何异常都会被捕获，页面显示友好提示并**自动降级为演示结果**，绝不把报错栈甩到页面上、不让页面崩溃。
 - 日志：用 `logging` 输出到 stdout，记录文件名/行数、当前模式、AI 调用耗时、异常类型；**任何情况下都不打印 API Key**。
-- 密钥管理：若部署环境 `st.secrets` 中存在 `OPENAI_API_KEY`，真实模式默认使用它；密钥不进仓库、不写进代码。
+- 密钥管理：`st.secrets` 可提供默认配置（`AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL` / `VISION_MODEL`，见下方「AI 服务配置」）；密钥不进仓库、不写进代码。
 
 ### AI 使用声明（A 类 · 作品功能中包含 AI 能力）
 
@@ -71,13 +71,38 @@ Run Analyzer 把这三件事收进一个网页：传表 → 出结论 → 出方
 
 原则：AI 负责「起草与提速」，人负责「判断与负责」——所有合并进仓库的代码，作者都读过一遍并能解释。
 
+## AI 服务配置（Secrets 与预设）
+
+配置优先级：`st.secrets` 提供默认值，侧边栏手动填写优先覆盖。
+
+- `AI_BASE_URL`：接口地址，缺省 `https://api.openai.com/v1`。
+- `AI_MODEL`：文本分析模型，缺省 `gpt-4o-mini`。
+- `VISION_MODEL`：截图识别模型，缺省回退到 `AI_MODEL`。
+- `AI_API_KEY`：密钥，回退 `DEEPSEEK_API_KEY` → 回退 `OPENAI_API_KEY`。
+
+- 服务商预设：侧边栏下拉可选 **DeepSeek / OpenAI / 自定义**。选 DeepSeek 自动填 `base_url=https://api.deepseek.com`、文本与视觉模型均为 `deepseek-flash`（官方当前模型，对应 V4.1-Flash-1017，官方文档称其支持图片输入）；切换预设不会清空已填的 API Key。
+- 视觉模型必须支持图片输入：若填的是纯文本模型（`deepseek-chat` / `deepseek-reasoner` / `gpt-3.5` 等），点识别会直接提示并**不发送请求**。
+- 离线 OCR 仍是默认主路径（不联网、不花钱），大模型识别只是可选增强；页面顶部「🔧 环境自检（识别引擎状态）」可展开查看引擎状态。
+
 ## 部署与访问方式
 
 ### 方式一：Streamlit Community Cloud（评审推荐，云端可访问）
 
 1. 用 GitHub 账号登录 <https://share.streamlit.io>。
 2. New app → 选择仓库 `www0255/run.analyzer` → 分支 `main` → 主文件 `app.py`。
-3. 需要真实 AI 时，在 Advanced settings → Secrets 里写入 `OPENAI_API_KEY = "sk-..."`（**不写进仓库**）；只演示演示模式则无需任何配置。
+3. 需要真实 AI 时，在 Advanced settings → Secrets 里粘贴下方配置（DeepSeek / OpenAI 任选一种）；**Key 只填在 Cloud 后台 Secrets，绝不提交进仓库**。只演示演示模式则无需任何配置：
+
+```toml
+# DeepSeek（推荐，与下方 OpenAI 二选一）
+AI_API_KEY = "sk-你的key"
+AI_BASE_URL = "https://api.deepseek.com"
+AI_MODEL = "deepseek-flash"
+VISION_MODEL = "deepseek-flash"
+# OpenAI（注释掉上面 4 行再启用这 3 行）
+# AI_API_KEY = "sk-你的key"
+# AI_BASE_URL = "https://api.openai.com/v1"
+# AI_MODEL = "gpt-4o-mini"
+```
 4. Deploy，等待构建完成，得到公开访问链接。
 5. 部署给出的公开链接即在线访问地址；重新部署时同步更新 README 与提交表（当前：https://runanalyzer-kjvqnr67d357hqecc4ordt.streamlit.app）。
 
@@ -88,7 +113,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-浏览器打开 <http://localhost:8501> 即可。真实 AI 模式需要的 Key 可在页面侧边栏填写，或在 `.streamlit/secrets.toml` 中配置 `OPENAI_API_KEY`（该文件已在 `.gitignore` 中，不入库）。
+浏览器打开 <http://localhost:8501> 即可。真实 AI 模式需要的 Key 可在页面侧边栏填写，或在 `.streamlit/secrets.toml` 中按「AI 服务配置」写入 `AI_API_KEY` 等键（该文件已在 `.gitignore` 中，不入库）。
 
 ### 方式三：Docker 运行
 
@@ -165,6 +190,8 @@ docker run -p 8501:8501 run-analyzer
 3. AI 结论的质量取决于所选模型；模型输出为自然语言建议，属参考性质，不构成医疗或训练处方。
 4. 演示模式使用的是预置样例结果，与用户上传的真实数据无关（页面已有明显徽标提示）。
 5. 警校模式的参考目标线是使用者自设的参考值，不涉及任何官方考核标准。
+6. 截图识别（视觉大模型）的成功路径取决于是否配置了可用的 API Key；未配置时只能用离线 OCR。
+7. 截图识别目前只在「第一赛道 + COROS PACE 4」版式上验证过，其它 App 版式需人工核对。
 
 **后续迭代**
 

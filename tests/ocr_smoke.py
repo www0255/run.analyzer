@@ -5,7 +5,10 @@
 3) 有 samples/ 真实截图时跑一次离线 OCR，与人工读图的 oracle 逐项比对。
 """
 
+import base64
+import logging
 import sys
+import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -202,6 +205,259 @@ def test_diagnostics():
         print("  {0} | {1} | {2}".format(row["项目"], row["状态"], row["详情"]))
 
 
+
+# --------------------------------------------------------------------------- #
+# AI 接入：Secrets 零配置 / 服务商预设 / 视觉能力守卫（全部离线可测）
+# --------------------------------------------------------------------------- #
+TINY_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8AAAwAB/AF+3w5rAAAAAElFTkSuQmCC"
+)
+FAKE_SECRET_KEY = "sk-test"        # 假 key：只用来证明它不会出现在页面和日志里
+FAKE_MANUAL_KEY = "sk-manual-fake"  # 另一个假 key：证明切预设不清空手填 key
+SECRET_STUB = {
+    "AI_BASE_URL": "https://api.deepseek.com",
+    "AI_MODEL": "deepseek-flash",
+    "VISION_MODEL": "deepseek-flash",
+    "AI_API_KEY": FAKE_SECRET_KEY,
+}
+
+
+class CaptureHandler(logging.Handler):
+    """把日志消息收集起来，供「key 不进日志」的断言使用。"""
+
+    def __init__(self, sink):
+        super().__init__()
+        self.sink = sink
+
+    def emit(self, record):
+        self.sink.append(record.getMessage())
+
+
+def capture_logs():
+    sink = []
+    handler = CaptureHandler(sink)
+    logging.getLogger().addHandler(handler)
+    return sink, handler
+
+
+def stop_capture(handler):
+    logging.getLogger().removeHandler(handler)
+
+
+def sidebar_inputs(at):
+    return {widget.key: widget for widget in at.sidebar.text_input}
+
+
+def sidebar_preset(at, app):
+    return {widget.key: widget for widget in at.sidebar.selectbox}[app.WIDGET_PRESET]
+
+
+def page_text(at) -> str:
+    """把页面上所有文字（含侧边栏控件标签/取值）拼起来，用来查 key 有没有泄漏。"""
+    parts = []
+    for block in (at, at.sidebar):
+        for kind in ("markdown", "caption", "info", "warning", "success", "error", "title",
+                     "subheader", "header", "text", "button", "selectbox", "text_input",
+                     "radio", "checkbox"):
+            for element in getattr(block, kind, []) or []:
+                parts.append(str(getattr(element, "value", "")))
+                parts.append(str(getattr(element, "label", "")))
+    return "\n".join(parts)
+
+
+def test_vision_payload():
+    """payload 函数级证明：只用假的 openai 模块，一次网络请求都不发。"""
+    print("[9] 视觉 payload 结构（png/jpg + 独立 vision_model）")
+    content = ocr.build_vision_messages(TINY_PNG)[0]["content"]
+    url = content[1]["image_url"]["url"]
+    check("messages 角色", [m["role"] for m in ocr.build_vision_messages(TINY_PNG)] == ["user"], True)
+    check("第一段是 text 提示", content[0]["type"], "text")
+    check("第二段是 image_url", content[1]["type"], "image_url")
+    check("png 的 data URL 前缀", url.startswith("data:image/png;base64,"), True)
+    jpg_like = b"\xff\xd8\xff" + b"\x00" * 32
+    check("jpg 的 data URL 前缀",
+          ocr.build_vision_messages(jpg_like)[0]["content"][1]["image_url"]["url"].startswith("data:image/jpeg;base64,"),
+          True)
+    print("  payload 结构: {\"role\": \"user\", \"content\": ["
+          "{\"type\": \"text\", \"text\": <VISION_PROMPT>}, "
+          "{\"type\": \"image_url\", \"image_url\": {\"url\": \"" + url[:44] + "...\"}}]}"
+          "（base64 总长度 " + str(len(url)) + "）")
+
+    captured = {}
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+
+            class Msg:
+                content = "日期,里程(km),时长(分钟),配速(min/km),平均心率\n2026-11-01,10.5,52.5,5.0,150\n"
+
+            class Choice:
+                message = Msg()
+
+            class Response:
+                choices = [Choice()]
+
+            return Response()
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            captured["client"] = kwargs
+            self.chat = types.SimpleNamespace(completions=FakeCompletions())
+
+    fake_module = types.ModuleType("openai")
+    fake_module.OpenAI = FakeOpenAI
+    original = sys.modules.get("openai")
+    sys.modules["openai"] = fake_module
+    try:
+        frame, error = ocr.vision_extract(TINY_PNG, "https://api.deepseek.com", "deepseek-flash", FAKE_SECRET_KEY)
+    finally:
+        if original is not None:
+            sys.modules["openai"] = original
+        else:
+            sys.modules.pop("openai", None)
+    check("视觉调用无错误", error, "")
+    check("解析出 1 行记录", 0 if frame is None else len(frame), 1)
+    check("请求用的模型是独立 vision_model", captured.get("model"), "deepseek-flash")
+    check("client 用传入 base_url", captured["client"].get("base_url"), "https://api.deepseek.com")
+    check("请求体里仍是 png data URL",
+          captured["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,"), True)
+    check("请求体里不含 key 明文", FAKE_SECRET_KEY in str(captured.get("messages")), False)
+
+
+def test_preset_switch():
+    """服务商预设：DeepSeek 填三个值；自定义不回退；key 不被清空。"""
+    print("[10] 服务商预设切换（页面级）")
+    import app
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=180).run()
+    check("初始无异常", [str(e) for e in at.exception] == [], True)
+    check("无 secrets 时预设为「自定义」",
+          {w.key: w for w in at.sidebar.selectbox}[app.WIDGET_PRESET].value, app.PRESET_CUSTOM)
+    sidebar_inputs(at)[app.WIDGET_API_KEY].set_value(FAKE_MANUAL_KEY)
+    at.run()
+    sidebar_preset(at, app).set_value(app.PRESET_DEEPSEEK)
+    at.run()
+    inputs = sidebar_inputs(at)
+    check("预设后 base_url", inputs[app.WIDGET_BASE_URL].value, "https://api.deepseek.com")
+    check("预设后文本模型", inputs[app.WIDGET_MODEL].value, "deepseek-flash")
+    check("预设后视觉模型", inputs[app.WIDGET_VISION_MODEL].value, "deepseek-flash")
+    check("预设不清空手填 key", inputs[app.WIDGET_API_KEY].value, FAKE_MANUAL_KEY)
+    sidebar_preset(at, app).set_value(app.PRESET_CUSTOM)
+    at.run()
+    inputs = sidebar_inputs(at)
+    check("自定义不回退 base_url", inputs[app.WIDGET_BASE_URL].value, "https://api.deepseek.com")
+    check("自定义不回退文本模型", inputs[app.WIDGET_MODEL].value, "deepseek-flash")
+    check("自定义不回退视觉模型", inputs[app.WIDGET_VISION_MODEL].value, "deepseek-flash")
+    check("自定义仍保留手填 key", inputs[app.WIDGET_API_KEY].value, FAKE_MANUAL_KEY)
+    check("切换后无异常", [str(e) for e in at.exception] == [], True)
+
+
+def test_secrets_config():
+    """优先级链条 + 守卫函数；最后把假 secrets 真正注入 st.secrets 供页面用例使用。"""
+    print("[11] Secrets 优先级与视觉守卫（函数级）")
+    import app
+
+    config = app.load_ai_config(SECRET_STUB)
+    check("AI_BASE_URL", config["base_url"], "https://api.deepseek.com")
+    check("AI_MODEL", config["model_name"], "deepseek-flash")
+    check("VISION_MODEL", config["vision_model"], "deepseek-flash")
+    check("AI_API_KEY 已读取", bool(config["api_key"]), True)
+    check("key 来源标记", config["key_source"], "AI_API_KEY")
+    check("回退 DEEPSEEK_API_KEY", app.load_ai_config({"DEEPSEEK_API_KEY": "sk-d"})["key_source"], "DEEPSEEK_API_KEY")
+    check("回退 OPENAI_API_KEY", app.load_ai_config({"OPENAI_API_KEY": "sk-o"})["key_source"], "OPENAI_API_KEY")
+    empty = app.load_ai_config({})
+    check("缺省 base_url", empty["base_url"], "https://api.openai.com/v1")
+    check("缺省文本模型", empty["model_name"], "gpt-4o-mini")
+    check("视觉模型回退文本模型", empty["vision_model"], "gpt-4o-mini")
+    check("无 key 时不算检测到", empty["has_secret_key"], False)
+
+    check("守卫拦 deepseek-chat", "不支持图片输入" in app.vision_guard_message("deepseek-chat"), True)
+    check("守卫拦 deepseek-reasoner", "不支持图片输入" in app.vision_guard_message("deepseek-reasoner"), True)
+    check("守卫拦 gpt-3.5", "不支持图片输入" in app.vision_guard_message("gpt-3.5-turbo"), True)
+    check("守卫提示点名视觉模型", app.DEEPSEEK_VISION_HINT in app.vision_guard_message("deepseek-chat"), True)
+    check("守卫放行 gpt-4o-mini", app.vision_guard_message("gpt-4o-mini"), "")
+    check("守卫放行视觉模型", app.vision_guard_message("deepseek-flash"), "")
+
+    import streamlit as st
+    st.secrets.merge_programmatic_secrets(SECRET_STUB)   # 不落盘：不碰 .streamlit/
+    live = app.load_ai_config()                          # 走真实的 st.secrets 读取路径
+    check("从 st.secrets 读到 base_url", live["base_url"], SECRET_STUB["AI_BASE_URL"])
+    check("从 st.secrets 读到视觉模型", live["vision_model"], SECRET_STUB["VISION_MODEL"])
+    check("从 st.secrets 读到 key", bool(live["api_key"]), True)
+
+
+def test_secrets_page():
+    print("[12] 页面：Secrets 检测提示 + 预设生效 + 全页面/日志不出现 key")
+    import app
+    from streamlit.testing.v1 import AppTest
+
+    logs, handler = capture_logs()
+    try:
+        at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=180).run()
+    finally:
+        stop_capture(handler)
+    check("页面无异常", [str(e) for e in at.exception] == [], True)
+    texts = [str(c.value) for c in at.caption] + [str(m.value) for m in at.markdown]
+    expected = "已从 Secrets 检测到配置（服务商: DeepSeek / 模型: deepseek-flash）"
+    check("侧边栏出现 Secrets 检测提示", any(expected in text for text in texts), True)
+    inputs = sidebar_inputs(at)
+    check("输入框用 secrets 的 base_url", inputs[app.WIDGET_BASE_URL].value, SECRET_STUB["AI_BASE_URL"])
+    check("输入框用 secrets 的文本模型", inputs[app.WIDGET_MODEL].value, SECRET_STUB["AI_MODEL"])
+    check("输入框用 secrets 的视觉模型", inputs[app.WIDGET_VISION_MODEL].value, SECRET_STUB["VISION_MODEL"])
+    joined = page_text(at)
+    check("页面任何文字都不含 key", FAKE_SECRET_KEY in joined, False)
+    check("日志任何一行都不含 key", any(FAKE_SECRET_KEY in line for line in logs), False)
+    print("  检测提示原文:", [text for text in texts if "已从 Secrets" in text])
+    print("  页面文字片段不含 key：检查了 {0} 个字符；日志 {1} 行".format(len(joined), len(logs)))
+
+
+def test_vision_guard_page():
+    print("[13] 页面：视觉模型=deepseek-chat 点识别 -> 只提示、零请求")
+    import app
+    import streamlit as st
+    from streamlit.testing.v1 import AppTest
+
+    images = sorted(SAMPLE_DIR.glob("*.jpg"))
+    if not images:
+        print("  SKIP: samples/ 无截图")
+        return
+
+    class FakeUpload:
+        def __init__(self, path):
+            self.name = path.name
+            self._data = path.read_bytes()
+
+        def getvalue(self):
+            return self._data
+
+    calls = []
+    original_extract = ocr.vision_extract
+    original_uploader = st.file_uploader
+    ocr.vision_extract = lambda *args, **kwargs: calls.append(args) or (None, "不应被调用")
+    st.file_uploader = lambda *args, **kwargs: (
+        [FakeUpload(path) for path in images] if kwargs.get("accept_multiple_files") else None
+    )
+    try:
+        at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=240).run()
+        sidebar_inputs(at)[app.WIDGET_VISION_MODEL].set_value("deepseek-chat")
+        at.run()
+        buttons = [button for button in at.button if "用大模型" in str(button.label)]
+        check("视觉按钮存在", len(buttons), 1)
+        buttons[0].click()
+        at.run()
+    finally:
+        ocr.vision_extract = original_extract
+        st.file_uploader = original_uploader
+    check("页面无异常", [str(e) for e in at.exception] == [], True)
+    warnings = [str(w.value) for w in at.warning]
+    expected = "当前视觉模型 deepseek-chat 不支持图片输入，DeepSeek 请用 " + app.DEEPSEEK_VISION_HINT
+    check("给出明确提示", any(expected in text for text in warnings), True)
+    check("完全没有发起视觉请求", len(calls), 0)
+    print("  提示原文:", [text for text in warnings if "deepseek-chat" in text])
+
+
 if __name__ == "__main__":
     test_offline_no_socket()
     test_parsers()
@@ -209,6 +465,11 @@ if __name__ == "__main__":
     test_real_images()
     test_app_multi_image()
     test_diagnostics()
+    test_vision_payload()
+    test_preset_switch()
+    test_secrets_config()
+    test_secrets_page()
+    test_vision_guard_page()
     print("=" * 60)
     if FAILED:
         print("FAILED 项:", FAILED)
