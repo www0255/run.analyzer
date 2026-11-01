@@ -737,7 +737,7 @@ def main() -> None:
         st.error(error)
         df = None
     elif df is not None:
-        st.subheader("数据预览（已清洗）")
+        st.subheader("数据预览")
         st.dataframe(preview_frame(df), hide_index=True)
 
         analysis_df = with_police_columns(df) if mode == MODE_POLICE else df
