@@ -269,33 +269,21 @@ def has_heart_rate(df) -> bool:
 
 
 def render_general_charts(df: pd.DataFrame) -> None:
-    """三条曲线同图对比：各自按本序列的最小/最大值归一化到 0-100，看趋势是否同步。"""
-    series = [
-        ("里程(km)", "里程", theme.SILVER),
-        ("配速(min/km)", "配速", theme.SILVER_DIM),
+    """三张独立趋势图（里程 / 配速 / 心率），曲线为平滑插值。"""
+    specs = [
+        ("里程(km)", "里程趋势 (km)", theme.SILVER),
+        ("配速(min/km)", "配速趋势 (min/km，越小越快)", theme.SILVER_DIM),
     ]
     if has_heart_rate(df):
-        series.append((HEART_RATE_COLUMN, "心率", theme.STEEL))
+        specs.append((HEART_RATE_COLUMN, "心率趋势 (bpm)", theme.STEEL))
 
-    figure = go.Figure()
-    for column, label, color in series:
-        values = pd.to_numeric(df[column], errors="coerce")
-        span = float(values.max() - values.min()) if values.notna().any() else 0.0
-        if span > 0:
-            normalized = (values - values.min()) / span * 100
-        else:
-            normalized = values * 0 + 50
-        figure.add_scatter(
-            x=df["日期"], y=normalized.round(1), mode="lines+markers", name=label,
-            line=dict(color=color, width=2.2, shape="spline", smoothing=0.6),
-            marker=dict(size=4, color=color, line=dict(width=1, color=theme.BG), opacity=.7),
-            hovertemplate="%{x|%m-%d}　" + label + " %{y:.0f}/100<extra></extra>",
-        )
-    figure.update_layout(yaxis=dict(range=[-8, 108]), xaxis=dict(tickformat="%m-%d"))
-    render_figure(theme.apply_base(figure, height=400))
-    st.caption("三条曲线各自归一化到 0–100（只比较趋势与同步性，不改变原始数值）；曲线为平滑插值。")
+    columns = st.columns(len(specs))
+    for container, (column, title, accent) in zip(columns, specs):
+        with container:
+            figure = px.line(df, x="日期", y=column, markers=True, title=title)
+            render_figure(theme.style_figure(figure, accent=accent, height=300))
     if not has_heart_rate(df):
-        st.caption("该数据没有心率列，心率已从对比图中省略。")
+        st.caption("该数据没有心率列，心率趋势图已跳过。")
 
 
 def render_police_chart(df: pd.DataFrame, goal_seconds: int) -> None:

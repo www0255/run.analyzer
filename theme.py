@@ -7,8 +7,6 @@
 - 图表去网格、去图例噪音，交由页面小节标题表达
 """
 
-from pathlib import Path
-
 import streamlit as st
 import plotly.graph_objects as go
 
@@ -24,9 +22,6 @@ SILVER_DIM = "#7C8188"    # 次数据线
 STEEL = "#6C8199"         # 心率（低饱和钢蓝，唯一有色相的数据）
 GOAL = "#A8AEB6"          # 参考目标线（浅灰虚线）
 DANGER = "#C4756B"        # 风险提示（低饱和砖红）
-
-ASSETS = Path(__file__).resolve().parent / "assets"
-RUNNER_GIF = ASSETS / "runner.gif"
 
 FONT_STACK = ('"Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", '
               '"Noto Sans SC", system-ui, sans-serif')
@@ -63,7 +58,8 @@ html, body, [class*="css"] { font-family: %(font)s; }
   text-transform: uppercase; color: var(--ra-muted);
 }
 .ra-title {
-  font-size: 2.1rem; font-weight: 800; letter-spacing: -0.8px; margin: 8px 0 6px;
+  font-family: %(mono)s;
+  font-size: 2.55rem; font-weight: 800; letter-spacing: 2.5px; margin: 8px 0 6px;
   color: #F2F3F5;
   text-shadow:
     0 1px 0 #C9CDD3, 0 2px 0 #A9AEB5, 0 3px 0 #8B9098, 0 4px 0 #6E737A,
@@ -141,6 +137,88 @@ h3, [data-testid="stMarkdownContainer"] h3 {
 }
 [data-testid="stAlert"] svg, [data-testid="stAlertContainer"] svg { color: var(--ra-muted) !important; }
 [data-testid="stImage"] img { border-radius: 12px; }
+
+/* ===== 3D 可点击控件：立体按压感 ===== */
+/* 次级按钮：面上凸起 + 底部实体阴影 */
+.stButton > button, .stDownloadButton > button {
+  background: linear-gradient(180deg, #24262A 0%%, #1A1C1F 100%%);
+  border: 1px solid #33363B; border-top-color: #45484E;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 2px 0 #0A0B0D, 0 6px 14px rgba(0,0,0,.45);
+  transition: transform .06s ease, box-shadow .06s ease, border-color .15s ease;
+}
+.stButton > button:hover, .stDownloadButton > button:hover {
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 3px 0 #0A0B0D, 0 9px 18px rgba(0,0,0,.5);
+}
+.stButton > button:active, .stDownloadButton > button:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.6), 0 1px 0 #0A0B0D;
+}
+/* 主按钮：银色金属面 + 更强的高光与底影 */
+.stButton > button[kind="primary"] {
+  background: linear-gradient(180deg, #F0F2F5 0%%, #C6CBD2 55%%, #AEB4BC 100%%);
+  border: 1px solid #8A9099; border-top-color: #FFFFFF;
+  box-shadow: inset 0 1px 0 #FFFFFF, inset 0 -2px 4px rgba(0,0,0,.18),
+              0 3px 0 #6E747C, 0 10px 22px rgba(0,0,0,.55);
+  text-shadow: 0 1px 0 rgba(255,255,255,.5);
+}
+.stButton > button[kind="primary"]:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.35), 0 1px 0 #6E747C;
+}
+
+/* 单选 / 复选：做成可按压的小卡片 */
+[data-testid="stRadio"] [role="radiogroup"] label,
+[data-testid="stCheckbox"] label {
+  background: linear-gradient(180deg, #1D1F23 0%%, #15171A 100%%);
+  border: 1px solid #33363B; border-top-color: #43464C;
+  border-radius: 10px; padding: 7px 11px; margin: 2px 0;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 2px 0 #0A0B0D, 0 5px 12px rgba(0,0,0,.35);
+  transition: transform .06s ease, box-shadow .06s ease, border-color .15s ease;
+}
+[data-testid="stRadio"] [role="radiogroup"] label:hover,
+[data-testid="stCheckbox"] label:hover { border-color: #565A61; transform: translateY(-1px); }
+[data-testid="stRadio"] [role="radiogroup"] label:active,
+[data-testid="stCheckbox"] label:active {
+  transform: translateY(1px); box-shadow: inset 0 2px 5px rgba(0,0,0,.55), 0 1px 0 #0A0B0D;
+}
+/* 选中项：银色内发光，像被按下并点亮的按钮 */
+[data-testid="stRadio"] [role="radiogroup"] label:has(input:checked),
+[data-testid="stCheckbox"] label:has(input:checked) {
+  border-color: #9BA1A9;
+  background: linear-gradient(180deg, #2C3036 0%%, #202328 100%%);
+  box-shadow: inset 0 0 0 1px rgba(211,215,221,.35), inset 0 2px 6px rgba(0,0,0,.5),
+              0 1px 0 #0A0B0D;
+}
+
+/* 下拉框：闭合成一块立体控件 */
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+  background: linear-gradient(180deg, #1D1F23 0%%, #15171A 100%%);
+  border: 1px solid #33363B; border-top-color: #43464C; border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 2px 0 #0A0B0D, 0 5px 12px rgba(0,0,0,.35);
+}
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover { border-color: #565A61; }
+
+/* 文本框 / 数字框：凹进去的输入槽 */
+[data-testid="stTextInput"] input, [data-testid="stNumberInput"] input {
+  background: #101214 !important; border-radius: 9px !important;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.65), inset 0 -1px 0 rgba(255,255,255,.05);
+}
+
+/* 展开条：立体标题条 */
+[data-testid="stExpander"] summary {
+  background: linear-gradient(180deg, #1E2024 0%%, #17191C 100%%);
+  border-radius: 11px; padding: 8px 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 2px 0 #0A0B0D;
+}
+[data-testid="stExpander"] summary:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 2px 0 #0A0B0D, 0 6px 14px rgba(0,0,0,.4); }
+
+/* 滑块：银色立体手柄 */
+[data-testid="stSlider"] [role="slider"] {
+  background: linear-gradient(180deg, #F2F4F7 0%%, #C0C6CD 100%%);
+  border: 1px solid #7E848C;
+  box-shadow: inset 0 1px 0 #FFFFFF, 0 2px 5px rgba(0,0,0,.6);
+}
 </style>
 """ % {
     "bg": BG, "surface": SURFACE, "surface_alt": SURFACE_ALT, "border": BORDER,
@@ -159,19 +237,14 @@ def section_title(text: str) -> None:
 
 
 def render_header(subtitle: str = "跑步记录 → 分析结论 → 训练方案 · 通用 / 警校体能双模式") -> None:
-    left, right = st.columns([5, 1])
-    with left:
-        st.markdown(
-            '<div class="ra-hero">'
-            '<div class="ra-kicker">RUN ANALYZER</div>'
-            '<div class="ra-title">跑步数据分析与体能训练方案生成器</div>'
-            '<div class="ra-sub">%s</div>'
-            "</div>" % subtitle,
-            unsafe_allow_html=True,
-        )
-    with right:
-        if RUNNER_GIF.exists():
-            st.image(str(RUNNER_GIF), width=180, caption=None)
+    st.markdown(
+        '<div class="ra-hero">'
+        '<div class="ra-kicker">跑步数据分析与体能训练方案生成器</div>'
+        '<div class="ra-title">RUN ANALYZER</div>'
+        '<div class="ra-sub">%s</div>'
+        "</div>" % subtitle,
+        unsafe_allow_html=True,
+    )
 
 
 def _template() -> go.layout.Template:
