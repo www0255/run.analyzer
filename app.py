@@ -16,7 +16,9 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+import coach_knowledge as coach
 import ocr_convert
+import theme
 
 logging.basicConfig(
     level=logging.INFO,
@@ -276,7 +278,8 @@ def render_general_charts(df: pd.DataFrame) -> None:
     for container, (column, title) in zip(columns, specs):
         with container:
             figure = px.line(df, x="日期", y=column, markers=True, title=title)
-            render_figure(figure)
+            accent = theme.FOCUS if column == HEART_RATE_COLUMN else theme.ACCENT
+            render_figure(theme.style_figure(figure, accent=accent))
     if not has_heart_rate(df):
         st.caption("该数据没有心率列，心率变化图已跳过。")
 
@@ -289,10 +292,11 @@ def render_police_chart(df: pd.DataFrame, goal_seconds: int) -> None:
         markers=True,
         title="1000 米折算用时趋势（数值越小越快）",
     )
+    theme.style_figure(figure, accent=theme.ACCENT, height=300)
     figure.add_hline(
         y=goal_seconds,
         line_dash="dash",
-        line_color="#d62728",
+        line_color=theme.GOAL,
         annotation_text="参考目标线（可自行设置） {0}".format(format_seconds(goal_seconds)),
         annotation_position="top left",
     )
@@ -301,11 +305,12 @@ def render_police_chart(df: pd.DataFrame, goal_seconds: int) -> None:
 
 def render_stats(df: pd.DataFrame, mode: str, goal_seconds: int) -> None:
     columns = st.columns(4)
-    columns[0].metric("跑步次数", "{0} 次".format(len(df)))
-    columns[1].metric("累计里程", "{0:.2f} km".format(df["里程(km)"].sum()))
-    columns[2].metric("平均配速", "{0:.2f} min/km".format(df["配速(min/km)"].mean()))
-    heart_rate_text = "{0:.0f} bpm".format(df[HEART_RATE_COLUMN].mean()) if has_heart_rate(df) else "—"
-    columns[3].metric(HEART_RATE_COLUMN, heart_rate_text)
+    # 单位放进标签，数值保持纯数字：暗色等宽排版下更整齐，也不会被截断
+    columns[0].metric("跑步次数", "{0}".format(len(df)))
+    columns[1].metric("累计里程 (km)", "{0:.2f}".format(df["里程(km)"].sum()))
+    columns[2].metric("平均配速 (min/km)", "{0:.2f}".format(df["配速(min/km)"].mean()))
+    heart_rate_text = "{0:.0f}".format(df[HEART_RATE_COLUMN].mean()) if has_heart_rate(df) else "—"
+    columns[3].metric("平均心率 (bpm)", heart_rate_text)
 
     if mode == MODE_POLICE:
         times = df["1000米用时(秒)"]
@@ -333,25 +338,9 @@ def build_stats_text(df: pd.DataFrame, mode: str, goal_seconds: int) -> str:
     return "\n".join(lines)
 
 
-def build_prompt(df: pd.DataFrame, mode: str, stats_text: str, goal_seconds: int) -> str:
-    if mode == MODE_POLICE:
-        task = (
-            "你是一位警校体能训练的助理教练。请基于上面的记录输出三部分：\n"
-            "1. 1000 米折算成绩评估（说明最好、最差与波动情况）；\n"
-            "2. 与用户自设参考目标线之间的差距，以及主要短板；\n"
-            "3. 下周 7 天训练课表（每周最多两次速度刺激，其余为有氧与恢复）。\n"
-            "注意：参考目标线只是用户自己设置的对照刻度，不要把它说成任何官方标准或考核要求。\n"
-            "文字简洁，适合直接展示在网页上。"
-        )
-    else:
-        task = (
-            "你是一位面向学生跑者的路跑教练。请输出三部分：\n"
-            "1. 简要评估近期运动状态；\n"
-            "2. 心率风险提示；\n"
-            "3. 一份下周简易训练计划，兼顾恢复，强度不要过高。\n"
-            "文字简洁，适合直接展示在网页上。"
-        )
-    return "{0}\n\n原始记录：\n{1}\n\n{2}".format(stats_text, df.to_csv(index=False), task)
+def build_prompt(df: pd.DataFrame, mode: str, stats_text: str, goal_seconds: int) -> list:
+    """装配专家级提示词：专家身份、训练学规则与输出格式都在 coach_knowledge.py。"""
+    return coach.build_messages(mode, stats_text, df.to_csv(index=False), goal_seconds)
 
 
 def describe_error(exc: Exception) -> str:
@@ -370,7 +359,7 @@ def describe_error(exc: Exception) -> str:
     return "服务返回异常，请稍后重试或更换模型"
 
 
-def call_ai(base_url: str, model_name: str, api_key: str, prompt: str, mode: str) -> str:
+def call_ai(base_url: str, model_name: str, api_key: str, messages: list, mode: str) -> str:
     """调用 OpenAI 兼容接口；失败时抛出异常，由调用方统一降级。"""
     from openai import OpenAI  # 延迟导入：依赖缺失也不影响页面加载
 
@@ -379,7 +368,7 @@ def call_ai(base_url: str, model_name: str, api_key: str, prompt: str, mode: str
     client = OpenAI(api_key=api_key, base_url=base_url, timeout=AI_TIMEOUT_SECONDS)
     response = client.chat.completions.create(
         model=model_name,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
         timeout=AI_TIMEOUT_SECONDS,
     )
     elapsed = time.perf_counter() - started
@@ -414,12 +403,12 @@ def apply_provider_preset(preset: str) -> None:
 
 def render_sidebar() -> tuple:
     with st.sidebar:
-        st.header("⚙️ 分析模式")
+        st.header("分析模式")
         mode = st.radio("选择模式", MODE_OPTIONS, index=0)
         demo_mode = st.checkbox("演示模式（不调用任何外部 API）", value=True)
 
         st.markdown("---")
-        st.header("🤖 AI 设置")
+        st.header("AI 设置")
         detected = load_ai_config()
 
         preset_options = list(PROVIDER_PRESETS) + [PRESET_CUSTOM]
@@ -506,7 +495,7 @@ def get_engine_diagnostics() -> dict:
 
 def render_engine_diagnostics() -> None:
     """可折叠的环境自检：让线上把「OCR 不可用」的真实原因自己说出来（不联网、绝不抛异常）。"""
-    with st.expander("🔧 环境自检（识别引擎状态）", expanded=False):
+    with st.expander("环境自检（识别引擎状态）", expanded=False):
         try:
             diagnostics = get_engine_diagnostics()
         except Exception as exc:  # noqa: BLE001 - 自检自身失败也不许影响主流程
@@ -518,7 +507,7 @@ def render_engine_diagnostics() -> None:
 
 def render_screenshot_entry(settings: dict):
     """主入口：上传截图 -> 离线/视觉识别 -> 人工校正 -> 导出 CSV 或接入分析。"""
-    st.subheader("📷 上传跑步记录截图（PNG/JPG）")
+    st.subheader("上传跑步记录截图（PNG/JPG）")
     uploaded = st.file_uploader(
         "可以一次选多张（一张截图 = 一次跑步）",
         type=["png", "jpg", "jpeg"],
@@ -597,7 +586,7 @@ def render_screenshot_entry(settings: dict):
 
 def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings: dict, goal_seconds: int) -> None:
     """演示模式永远先渲染预置结果；真实模式异常时也回到同一条渲染路径。"""
-    st.subheader("🤖 运动评估与训练计划")
+    st.subheader("运动评估与训练计划")
 
     if demo_mode:
         st.success("演示模式 · 预置样例结果")
@@ -620,10 +609,10 @@ def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings:
         st.caption("点击按钮后调用真实大模型；任何异常都会自动降级为演示结果。")
         return
 
-    prompt = build_prompt(df, mode, build_stats_text(df, mode, goal_seconds), goal_seconds)
+    messages = build_prompt(df, mode, build_stats_text(df, mode, goal_seconds), goal_seconds)
     try:
         with st.spinner("AI 分析中，最长等待 30 秒..."):
-            text = call_ai(settings["base_url"], settings["model_name"], settings["api_key"], prompt, mode)
+            text = call_ai(settings["base_url"], settings["model_name"], settings["api_key"], messages, mode)
     except Exception as exc:  # noqa: BLE001 - 真实模式必须降级而不能崩溃
         logger.warning("AI 调用失败，降级为演示结果: mode=%s error=%s detail=%s", mode, type(exc).__name__, exc)
         st.error("AI 调用失败（{0}）：{1}。已自动降级为演示结果。".format(type(exc).__name__, describe_error(exc)))
@@ -636,9 +625,9 @@ def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings:
 
 
 def main() -> None:
-    st.set_page_config(page_title="跑步数据分析与体能训练方案生成器", page_icon="🏃", layout="wide")
-    st.title("🏃 跑步数据分析与体能训练方案生成器")
-    st.caption("Run Analyzer · 通用跑者模式 / 警校体能考核模式 · 支持零配置演示与真实大模型分析")
+    st.set_page_config(page_title="RUN ANALYZER · 跑步数据分析与体能训练", page_icon="🏃", layout="wide")
+    theme.inject_css()
+    theme.render_header()
 
     mode, demo_mode, settings = render_sidebar()
     logger.info("页面渲染: mode=%s demo_mode=%s", mode, demo_mode)
@@ -675,15 +664,15 @@ def main() -> None:
         st.error(error)
         df = None
     elif df is not None:
-        st.subheader("📋 数据预览（已清洗）")
+        st.subheader("数据预览（已清洗）")
         st.dataframe(df)
 
         analysis_df = with_police_columns(df) if mode == MODE_POLICE else df
 
-        st.subheader("📈 可视化图表")
+        st.subheader("可视化图表")
         render_general_charts(analysis_df)
         if mode == MODE_POLICE:
-            st.markdown("#### 🎯 1000 米折算用时与参考目标线")
+            st.markdown("#### 1000 米折算用时与参考目标线")
             goal_seconds = st.slider(
                 "参考目标线（可自行设置）",
                 min_value=180,
@@ -695,7 +684,7 @@ def main() -> None:
             st.caption("当前参考目标线：{0}（可拖动滑块自行调整）".format(format_seconds(goal_seconds)))
             render_police_chart(analysis_df, goal_seconds)
 
-        st.subheader("📊 汇总统计")
+        st.subheader("汇总统计")
         render_stats(analysis_df, mode, goal_seconds)
 
     render_analysis(mode, demo_mode, demo_content, analysis_df_for_prompt(mode, df), settings, goal_seconds)

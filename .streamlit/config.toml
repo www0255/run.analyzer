@@ -7,4 +7,12 @@ port = 8501
 gatherUsageStats = false
 
 [theme]
-base = "light"
+base = "dark"
+primaryColor = "#39D353"
+backgroundColor = "#0B0F14"
+secondaryBackgroundColor = "#121A23"
+textColor = "#E6EDF3"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"

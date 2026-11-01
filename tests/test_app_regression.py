@@ -55,7 +55,8 @@ def case_heart_rate_optional():
     joined = "\n".join([str(w.value) for w in at.warning])
     expect("心率" in joined, "页面给出心率跳过提示", repr(joined[-80:]))
     metrics = {str(m.label): str(m.value) for m in at.metric}
-    expect(metrics.get("平均心率") == "—", "平均心率统计显示 —", repr(metrics.get("平均心率")))
+    expect(metrics.get("平均心率 (BPM)") == "—" or metrics.get("平均心率 (bpm)") == "—",
+           "平均心率统计显示 —", repr({k: v for k, v in metrics.items() if "心率" in k}))
     expect("每次跑步里程趋势" not in "", "图表标题不计入文本")
     return at
 
