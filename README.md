@@ -3,7 +3,7 @@
 **广西警察学院人工智能协会 · 72 小时黑客松 参赛作品**
 
 - 源码仓库：<https://github.com/www0255/run.analyzer>（公开仓库）
-- 在线访问：**<DEPLOY_URL>**（Streamlit Community Cloud 部署完成后替换为真实链接）
+- 在线访问：**https://runanalyzer-kjvqnr67d357hqecc4ordt.streamlit.app**（Streamlit Community Cloud 公开部署，无需注册或登录，打开即用）
 - 演示方式：打开网页 → 侧边栏保持「演示模式 → 开」→ 上传示例数据 → 直接出结果，**不需要任何 API Key、不依赖外网**
 
 ## 一句话定位
@@ -71,7 +71,7 @@ Run Analyzer 把这三件事收进一个网页：传表 → 出结论 → 出方
 2. New app → 选择仓库 `www0255/run.analyzer` → 分支 `main` → 主文件 `app.py`。
 3. 需要真实 AI 时，在 Advanced settings → Secrets 里写入 `OPENAI_API_KEY = "sk-..."`（**不写进仓库**）；只演示演示模式则无需任何配置。
 4. Deploy，等待构建完成，得到公开访问链接。
-5. 把该链接填写到 README 与提交表的 `<DEPLOY_URL>` 处。
+5. 部署给出的公开链接即在线访问地址；重新部署时同步更新 README 与提交表（当前：https://runanalyzer-kjvqnr67d357hqecc4ordt.streamlit.app）。
 
 ### 方式二：本地运行
 
@@ -112,7 +112,7 @@ docker run -p 8501:8501 run-analyzer
 
 ### 访问链接
 
-- 云端地址：**<DEPLOY_URL>**
+- 云端地址：https://runanalyzer-kjvqnr67d357hqecc4ordt.streamlit.app
 - 本地地址：<http://localhost:8501>
 
 ## 数据格式说明
