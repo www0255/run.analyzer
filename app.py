@@ -322,6 +322,36 @@ def has_heart_rate(df) -> bool:
     return HEART_RATE_COLUMN in df.columns and bool(df[HEART_RATE_COLUMN].notna().any())
 
 
+MARKER_MAX_POINTS = 40    # 超过这个点数不再画记号点，否则糊成一片；同时也是叠滑动平均的门槛
+
+
+def plot_trend(df: pd.DataFrame, column: str, accent: str, height: int = 300) -> go.Figure:
+    """单条趋势线：少量数据是平滑曲线 + 记号点，数据多时再叠一条滑动平均。
+
+    平滑只为读得清：原始记录仍以细线留在图上，真实波动不会被改掉。
+    """
+    count = len(df)
+    figure = px.line(df, x="日期", y=column, markers=count <= MARKER_MAX_POINTS)
+    theme.style_figure(figure, accent=accent, height=height)
+    if count > MARKER_MAX_POINTS:
+        window = max(3, min(14, count // 20))
+        average = df[column].rolling(window=window, min_periods=1).mean()
+        figure.update_traces(
+            line=dict(color=accent, width=0.8, shape="spline", smoothing=0.35),
+            marker=dict(size=3, color=accent, opacity=.25),
+            opacity=.28,
+            name="单次记录",
+            showlegend=False,
+        )
+        figure.add_scatter(
+            x=df["日期"], y=average, mode="lines",
+            name="{0} 点滑动平均".format(window),
+            line=dict(color=accent, width=2.4, shape="spline", smoothing=0.85),
+            hovertemplate="%{x|%m-%d}　%{y:.2f}<extra>滑动平均</extra>",
+        )
+    return figure
+
+
 def render_general_charts(df: pd.DataFrame) -> None:
     """三张独立趋势图（里程 / 配速 / 心率），曲线为平滑插值。"""
     specs = [
@@ -338,8 +368,7 @@ def render_general_charts(df: pd.DataFrame) -> None:
                 '<div class="ra-fig-label">{0}</div>'.format(title),
                 unsafe_allow_html=True,
             )
-            figure = px.line(df, x="日期", y=column, markers=True)
-            render_figure(theme.style_figure(figure, accent=accent, height=300))
+            render_figure(plot_trend(df, column, accent))
     if not has_heart_rate(df):
         st.caption("该数据没有心率列，心率趋势图已跳过。")
 
@@ -349,8 +378,7 @@ def render_police_chart(df: pd.DataFrame, goal_seconds: int) -> None:
         '<div class="ra-fig-label">1000 米折算用时趋势（数值越小越快）</div>',
         unsafe_allow_html=True,
     )
-    figure = px.line(df, x="日期", y="1000米用时(秒)", markers=True)
-    theme.style_figure(figure, accent=theme.SILVER, height=320)
+    figure = plot_trend(df, "1000米用时(秒)", theme.SILVER, height=320)
     figure.add_hline(
         y=goal_seconds,
         line_dash="dash",
@@ -394,9 +422,94 @@ def build_stats_text(df: pd.DataFrame, mode: str, goal_seconds: int) -> str:
     return "\n".join(lines)
 
 
-def build_prompt(df: pd.DataFrame, mode: str, stats_text: str, goal_seconds: int) -> list:
-    """装配专家级提示词：专家身份、训练学规则与输出格式都在 coach_knowledge.py。"""
-    return coach.build_messages(mode, stats_text, df.to_csv(index=False), goal_seconds)
+AI_DIGEST_MAX_CHARS = 4000   # 送进模型的数据段落硬上限，超出即视为上下文风险
+AI_RAW_ROW_LIMIT = 60        # 不超过这个条数的数据直接给原始 CSV，最精确
+BUCKET_ROW_LIMIT = 26        # 汇总表最多保留多少行（周汇总或月汇总）
+RECENT_ROW_LIMIT = 10        # 摘要里保留最近多少次原始记录
+
+
+def _rate_text(value) -> str:
+    return "{0:.0f}".format(value) if pd.notna(value) else "—"
+
+
+def build_ai_digest(df: pd.DataFrame, mode: str, goal_seconds: int) -> str:
+    """把任意规模的记录压成有长度上界的摘要：总量 + 趋势对比 + 分段汇总 + 最近若干次。
+
+    送进模型的长度只跟分段数有关，5000 行的 CSV 也不会再撑爆上下文或让模型数不清。
+    """
+    frame = df.copy()
+    frame["_day"] = pd.to_datetime(frame["日期"], errors="coerce").dt.normalize()
+    week = frame["_day"] - pd.to_timedelta(frame["_day"].dt.dayofweek, unit="D")
+    weekly = week.nunique() <= BUCKET_ROW_LIMIT
+    frame["_bucket"] = week if weekly else frame["_day"].values.astype("datetime64[M]")
+    has_hr = has_heart_rate(frame)
+
+    lines = [
+        "记录条数：{0}（{1} 至 {2}）".format(
+            len(frame), frame["_day"].min().strftime("%Y-%m-%d"), frame["_day"].max().strftime("%Y-%m-%d")),
+        "累计里程：{0:.2f} km；单次范围 {1:.2f}–{2:.2f} km".format(
+            frame["里程(km)"].sum(), frame["里程(km)"].min(), frame["里程(km)"].max()),
+        "平均配速：{0:.2f} min/km（最快 {1:.2f}，最慢 {2:.2f}）".format(
+            frame["配速(min/km)"].mean(), frame["配速(min/km)"].min(), frame["配速(min/km)"].max()),
+        "平均心率：{0}".format(
+            "{0:.0f} bpm（{1:.0f}–{2:.0f}）".format(
+                frame[HEART_RATE_COLUMN].mean(), frame[HEART_RATE_COLUMN].min(), frame[HEART_RATE_COLUMN].max())
+            if has_hr else "—（本次数据未提供心率）"),
+    ]
+    if mode == MODE_POLICE:
+        times = frame["1000米用时(秒)"]
+        lines.append("1000 米折算：最好 {0}，平均 {1}，最慢 {2}".format(
+            format_seconds(times.min()), format_seconds(times.mean()), format_seconds(times.max())))
+        lines.append("参考目标线（用户自设，非官方标准）：{0}".format(format_seconds(goal_seconds)))
+
+    buckets = []
+    for key, chunk in frame.groupby("_bucket", sort=True):
+        heart = chunk[HEART_RATE_COLUMN].mean() if has_hr else float("nan")
+        buckets.append((key, len(chunk), chunk["里程(km)"].sum(), chunk["配速(min/km)"].mean(), heart))
+
+    if len(buckets) >= 2:
+        recent = buckets[-4:]
+        earlier = buckets[-8:-4] or buckets[:4]
+        recent_km = sum(item[2] for item in recent) / len(recent)
+        earlier_km = sum(item[2] for item in earlier) / len(earlier)
+        change = (recent_km / earlier_km - 1) * 100 if earlier_km else 0.0
+        lines.append("趋势对比：最近 {0} 期平均 {1:.1f} km，此前 {2} 期平均 {3:.1f} km，变化 {4:+.0f}%".format(
+            len(recent), recent_km, len(earlier), earlier_km, change))
+
+    lines.append("")
+    lines.append(("{0}：起始日 | 次数 | 里程km | 平均配速 | 平均心率").format("周汇总（每周一行）" if weekly else "月汇总（每月一行）"))
+    for key, count, km, pace, heart in buckets[-BUCKET_ROW_LIMIT:]:
+        lines.append("{0} | {1} | {2:.1f} | {3:.2f} | {4}".format(
+            key.strftime("%Y-%m-%d"), count, km, pace, _rate_text(heart)))
+
+    lines.append("")
+    lines.append("最近 {0} 次记录（日期 | 里程km | 配速 | 心率）：".format(min(RECENT_ROW_LIMIT, len(frame))))
+    for _, row in frame.tail(RECENT_ROW_LIMIT).iterrows():
+        heart = row[HEART_RATE_COLUMN] if has_hr else float("nan")
+        lines.append("{0} | {1:.2f} | {2:.2f} | {3}".format(
+            row["_day"].strftime("%Y-%m-%d"), row["里程(km)"], row["配速(min/km)"], _rate_text(heart)))
+
+    if has_hr:
+        zones = [
+            ("低于 130", frame[HEART_RATE_COLUMN] < 130),
+            ("130–149", (frame[HEART_RATE_COLUMN] >= 130) & (frame[HEART_RATE_COLUMN] < 150)),
+            ("150–169", (frame[HEART_RATE_COLUMN] >= 150) & (frame[HEART_RATE_COLUMN] < 170)),
+            ("170 以上", frame[HEART_RATE_COLUMN] >= 170),
+        ]
+        lines.append("心率分布：" + "　".join("{0} {1} 次".format(label, int(mask.sum())) for label, mask in zones))
+
+    digest = "\n".join(lines)
+    if len(digest) > AI_DIGEST_MAX_CHARS:
+        digest = digest[:AI_DIGEST_MAX_CHARS] + "\n…（摘要已截断）"
+    return digest
+
+
+def build_ai_payload(df: pd.DataFrame, mode: str, goal_seconds: int) -> tuple:
+    """小数据给原始 CSV（最精确），大数据给压缩摘要（长度有上界）。返回 (文本, 是否压缩)。"""
+    raw = df.to_csv(index=False)
+    if len(df) <= AI_RAW_ROW_LIMIT and len(raw) <= AI_DIGEST_MAX_CHARS:
+        return raw, False
+    return build_ai_digest(df, mode, goal_seconds), True
 
 
 def describe_error(exc: Exception) -> str:
@@ -697,7 +810,13 @@ def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings:
         st.caption("点击按钮后调用真实大模型；任何异常都会自动降级为演示结果。")
         return
 
-    messages = build_prompt(df, mode, build_stats_text(df, mode, goal_seconds), goal_seconds)
+    payload, compressed = build_ai_payload(df, mode, goal_seconds)
+    if compressed:
+        st.caption(
+            "数据量较大（{0} 行）：已自动压缩为分段汇总 + 最近 {1} 次记录再送模型，"
+            "长度有上界，不会因为记录太多而超上下文失败。".format(len(df), RECENT_ROW_LIMIT)
+        )
+    messages = coach.build_messages(mode, build_stats_text(df, mode, goal_seconds), payload, goal_seconds)
     try:
         with st.spinner("AI 分析中，最长等待 30 秒..."):
             text = call_ai(settings["base_url"], settings["model_name"], settings["api_key"], messages, mode)

@@ -429,7 +429,7 @@ def style_figure(figure, accent: str = SILVER, height: int = 300, smooth: bool =
     """统一图表皮肤：细网格、平滑曲线、紧凑边距、克制记号点。"""
     figure.update_layout(template=_template(), height=height)
     figure.update_traces(
-        line=dict(color=accent, width=2.2, shape="spline", smoothing=0.6),
+        line=dict(color=accent, width=2.2, shape="spline", smoothing=1.0),
         marker=dict(size=4, color=accent, line=dict(width=1, color=BG), opacity=.75),
         hovertemplate="%{x|%m-%d}　%{y:.2f}<extra></extra>",
     )

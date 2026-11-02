@@ -133,12 +133,45 @@ def case_upload_and_vision_without_key():
         st.file_uploader = original_uploader
 
 
+def case_smooth_chart_and_large_data():
+    """图表平滑 + 大数据给压缩摘要：不靠肉眼，直接查 trace 与摘要长度。"""
+    print("[6] 曲线平滑与大数据摘要上界")
+    import app
+
+    demo = ROOT / "demo_csv"
+    big = demo / "04_大样本_500次.csv"
+    small = demo / "01_入门跑者_30次.csv"
+    if not big.exists() or not small.exists():
+        print("  [SKIP] demo_csv/ 缺演示数据，跳过摘要与平滑断言")
+        return
+
+    df_big, _, err_big = app.load_run_data(open(big, "rb"))
+    df_small, _, err_small = app.load_run_data(open(small, "rb"))
+    expect(err_big is None and err_small is None, "演示 CSV 可加载", str(err_big or err_small))
+
+    payload, compressed = app.build_ai_payload(df_big, app.MODE_GENERAL, 270)
+    expect(compressed, "500 行数据走压缩摘要")
+    expect(len(payload) <= app.AI_DIGEST_MAX_CHARS, "摘要长度不超过硬上限",
+           "{0} <= {1}".format(len(payload), app.AI_DIGEST_MAX_CHARS))
+    expect("汇总" in payload and "最近" in payload, "摘要含分段汇总与最近记录")
+    small_payload, small_compressed = app.build_ai_payload(df_small, app.MODE_GENERAL, 270)
+    expect(not small_compressed, "30 行数据仍给原始 CSV（不提前压缩）", "{0} 字符".format(len(small_payload)))
+
+    figure = app.plot_trend(df_big, "里程(km)", "#fff")
+    expect(len(figure.data) == 2, "大数据多点一条滑动平均", "{0} 条 trace".format(len(figure.data)))
+    expect(all(trace.line.shape == "spline" for trace in figure.data), "两条曲线都是 spline")
+    small_figure = app.plot_trend(df_small, "里程(km)", "#fff")
+    expect(len(small_figure.data) == 1, "40 点以内的数据不叠滑动平均")
+    expect(small_figure.data[0].mode == "lines+markers", "小数据仍保留记号点", str(small_figure.data[0].mode))
+
+
 if __name__ == "__main__":
     case_demo_general()
     case_heart_rate_optional()
     case_police_and_slider()
     case_real_mode_without_key()
     case_upload_and_vision_without_key()
+    case_smooth_chart_and_large_data()
     print("=" * 60)
     if FAILED:
         print("FAILED:", FAILED)
