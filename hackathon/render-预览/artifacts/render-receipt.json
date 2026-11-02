@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "producer": "dsh-ppt-render",
+  "status": "rendered",
+  "visual": "not-verified",
+  "createdAt": "2026-11-02T13:21:18.927Z",
+  "renderer": {
+    "package": "@deepseek-ai/libreoffice-kit",
+    "version": "0.1.5",
+    "backend": "native"
+  },
+  "source": {
+    "sha256": "28e9294e9b9bea96df605ac3ce861842e89d70e2852f6c541f35d0fa823566b0",
+    "byteLength": 470535
+  },
+  "format": "png",
+  "slideCount": 12,
+  "missingFonts": [],
+  "pngs": [
+    {
+      "page": 1,
+      "file": "pages/page-0001.png",
+      "byteLength": 44699,
+      "sha256": "bf2b543e8858fabccaffe3f75129feb720f4c195c94a2ec9b369f39a952bcf5e",
+      "width": 1441,
+      "height": 811
+    },
+    {
+      "page": 2,
+      "file": "pages/page-0002.png",
+      "byteLength": 37919,
+      "sha256": "2c8e12387569a4b50631b17eecf8004708d1be9d58bb910032dfcb73bb4e5388",
+      "width": 1441,
+      "height": 811
+    },
+    {
+      "page": 3,
+      "file": "pages/page-0003.png",
+      "byteLength": 86716,
+      "sha256": "87dfbf9f2915b33917f9637ce880ada255fb4b15243f33e7bfd00e4389e01285",
+      "width": 1441,
+      "height": 811
+    },
+    {
+      "page": 4,
+      "file": "pages/page-0004.png",
+      "byteLength": 269093,
+      "sha256": "64e3342045532eb65de6c55a188f8adceb5af6556722df99fc617f275f1e71e7",
+      "width": 1441,
+      "height": 811
+    },
+    {
+      "page": 5,
+      "file": "pages/page-0005.png",
+      "byteLength": 225383,
+      "sha256": "f4548a66227a3595e1370d9b381e5faf48279eac0cdd0c363767fad793a4cf5f",
+      "width": 1441,
+      "height": 811
+    },
+    {
+      "page": 6,
+      "file": "pages/page-0006.png",
+      "byteLength": 69666,
+      "sha256": "cbbd85b7dc4739f96eda58c789929a83ed5756bedb717aaef3769d5d6211c3b4",
+      "width": 1441,
+      "height": 811
+    },
+    {
+      "page": 7,
+      "file": "pages/page-0007.png",
+      "byteLength": 61272,
+      "sha256": "5edc61e38f2862cd1f4786021589bbce65df6709f8acfb969f32e81aa1833ca1",
+      "width": 1441,
+      "height": 811
+    },
+    {
+      "page": 8,
+      "file": "pages/page-0008.png",
+      "byteLength": 70173,
+      "sha256": "0377e463dd61f61847706bbb651988c7ae5449c37748b5d59b3f6208db69a234",
+      "width": 1441,
+      "height": 811
+    },
+    {
+      "page": 9,
+      "file": "pages/page-0009.png",
+      "byteLength": 75448,
+      "sha256": "c9d2d9245b09d4494aa25f2285a25cb9672c208b7da37981e5baaf9a2b85f101",
+      "width": 1441,
+      "height": 811
+    },
+    {
+      "page": 10,
+      "file": "pages/page-0010.png",
+      "byteLength": 42933,
+      "sha256": "8a4201688584f1271287ef3e142733688bb666a3d7f6c786184180c1b653cc57",
+      "width": 1441,
+      "height": 811
+    },
+    {
+      "page": 11,
+      "file": "pages/page-0011.png",
+      "byteLength": 69550,
+      "sha256": "2eeb58a37901c0902cd5bf63d8ea0dbd280f3d471d0acb6277081ee3052ca019",
+      "width": 1441,
+      "height": 811
+    },
+    {
+      "page": 12,
+      "file": "pages/page-0012.png",
+      "byteLength": 37761,
+      "sha256": "b7c88c6e90a9b8f09deac70183ad90baa487e9bc8e72e41aa5b3f21d1b319efb",
+      "width": 1441,
+      "height": 811
+    }
+  ],
+  "manifest": {
+    "file": "pages/manifest.json",
+    "byteLength": 4680,
+    "sha256": "05fb6cc342bd9b46ed8a15711e88ce07cd14fcdc0964e6427074e8ed3f6ccb9e"
+  }
+}

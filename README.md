@@ -174,4 +174,4 @@ docker run -p 8501:8501 run-analyzer
 
 ---
 
-*本项目为广西警察学院 72 小时黑客松参赛作品；赛事提交材料见 `docs/` 与 `hackathon/`。`hackathon/一页PPT.pptx` 是必交件，`hackathon/答辩多页PPT.pptx`（10 页，含 HTML 放映版）是现场讲解用，不替代一页 PPT。*
+*本项目为广西警察学院 72 小时黑客松参赛作品；赛事提交材料见 `docs/` 与 `hackathon/`。`hackathon/一页PPT.pptx` 是必交件，`hackathon/答辩多页PPT-dsh.pptx`（12 页，含同名 HTML 放映版与 JSON 工程文件，逐页渲染预览见 `hackathon/render-预览/`）是现场讲解用，不替代一页 PPT；`答辩多页PPT.pptx` 为上一版留档。*

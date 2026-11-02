@@ -181,10 +181,14 @@ def test_app_multi_image():
     print("[7] 应用层多图合并（app.convert_screenshots，含 1 张损坏图）")
     import app
 
-    payloads = [(path.name, path.read_bytes()) for path in sorted(SAMPLE_DIR.glob("*.jpg"))]
+    sample_images = sorted(SAMPLE_DIR.glob("*.jpg"))
+    if not sample_images or not ocr.ocr_available():
+        print("  SKIP: samples/ 无截图或未安装 rapidocr")
+        return
+    payloads = [(path.name, path.read_bytes()) for path in sample_images]
     payloads.append(("broken.jpg", b"this-is-not-an-image"))
     frame, notes, failures = app.convert_screenshots(payloads)
-    check("合并后行数", len(frame), 4)
+    check("合并后行数", len(frame), len(sample_images))
     check("失败提示条数", len(failures), 1)
     for failure in failures:
         print("  失败提示:", failure)
