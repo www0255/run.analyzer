@@ -175,3 +175,5 @@ docker run -p 8501:8501 run-analyzer
 ---
 
 *本项目为广西警察学院 72 小时黑客松参赛作品；赛事提交材料见 `docs/` 与 `hackathon/`。`hackathon/一页PPT.pptx` 是必交件，`hackathon/答辩多页PPT-dsh.pptx`（12 页，含同名 HTML 放映版与 JSON 工程文件，逐页渲染预览见 `hackathon/render-预览/`）是现场讲解用，不替代一页 PPT；`答辩多页PPT.pptx` 为上一版留档。*
+
+*两份 PPT 的每一页都印有线上地址的二维码（指向 <https://runanalyzer-kjvqnr67d357hqecc4ordt.streamlit.app>），评委可当场扫码。码图与贴图脚本为 `hackathon/qr_badge.png` 与 `hackathon/add_qr.py`；脚本幂等，重复执行只校正位置、不会重复粘贴。*

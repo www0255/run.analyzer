@@ -2,12 +2,18 @@
   "version": "0.20.3",
   "schemaVersion": 1,
   "deckId": "99e65478-c83e-49cf-8ad6-49d9386e597a",
-  "revision": 11,
+  "revision": 12,
   "title": "RUN ANALYZER 答辩演示",
   "theme": "data",
   "language": "zh",
   "motion": true,
   "assets": {
+    "img-2d95dd6e9afe5fe3f608d619004ba639363bcf17d10bc16802a6a15d951dbfe4": {
+      "width": 822,
+      "height": 822,
+      "mime": "image/png",
+      "data": "data:image/png;base64,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"
+    },
     "img-b089374ed16c8de70b9c757a37f2d7c9b9efc85b140f78e5b897884304d5c745": {
       "width": 1740,
       "height": 960,
@@ -2733,6 +2739,274 @@
         "name": "RUN ANALYZER",
         "footer": "RUN ANALYZER · 广西警察学院 72 小时黑客松"
       }
+    },
+    {
+      "title": "RUN ANALYZER 答辩演示",
+      "theme": "data",
+      "language": "zh",
+      "motion": true,
+      "slides": [
+        {
+          "layout": "cover",
+          "kicker": "广西警察学院人工智能协会 · 72 小时黑客松",
+          "title": "RUN ANALYZER",
+          "subtitle": "跑步数据分析与体能训练方案生成器 · 申报 A 类 + B 类",
+          "text": "",
+          "bullets": [],
+          "notes": "开场 15 秒：一句话说清是什么——把一份跑步记录变成结论和方案。",
+          "id": "4f62af54-a683-4775-8d93-ca98e70f9ff5"
+        },
+        {
+          "layout": "statement",
+          "kicker": "",
+          "title": "运动 App 只给图，不给下一步。",
+          "subtitle": "你要的不是第 10 张曲线图，是「下周怎么练」。",
+          "text": "",
+          "bullets": [],
+          "notes": "把痛点钉在一句话上，再往下展开四个卡点。",
+          "id": "911ff540-bed7-47dc-80df-a120ad5ac43a"
+        },
+        {
+          "layout": "table",
+          "kicker": "问题",
+          "title": "四个卡点，卡在同一个地方：从数据到决策",
+          "rows": [
+            [
+              "卡点",
+              "通常的做法",
+              "这里怎么做"
+            ],
+            [
+              "图给了，结论没给",
+              "再画第 10 张曲线",
+              "汇总表 + 五段训练方案"
+            ],
+            [
+              "想用 AI，先被 Key 挡住",
+              "自备 Key，401 就放弃",
+              "预置样例，零 Key 可跑"
+            ],
+            [
+              "min/km 与 1000 米不同口径",
+              "自己心算",
+              "一键折算成秒，配参考线"
+            ],
+            [
+              "记录只在截图里",
+              "手抄进表格",
+              "截图 OCR，多图合并"
+            ]
+          ],
+          "notes": "四条都在讲同一件事：不是缺数据，是缺从数据到下一步的那一步。每一条都给了一个具体做法，不喊口号。",
+          "id": "03f2759f-4b12-496a-94e4-33194e7d053f"
+        },
+        {
+          "layout": "image",
+          "kicker": "",
+          "title": "一次上传，三秒拿到结论",
+          "subtitle": "",
+          "text": "",
+          "bullets": [],
+          "notes": "演示时从这里开始：切换模式、上传、出结果。",
+          "image": {
+            "alt": "上传区：一个方框里切换截图识别与 CSV",
+            "fit": "contain",
+            "caption": "一个方框里切换「截图识别 / CSV」，识别引擎自检也收在同一格里",
+            "assetId": "img-b089374ed16c8de70b9c757a37f2d7c9b9efc85b140f78e5b897884304d5c745"
+          },
+          "id": "44e09fe4-bd11-4b44-aab9-1c74bf80cf3b"
+        },
+        {
+          "layout": "image",
+          "kicker": "",
+          "title": "趋势是过程，汇总表才是结论",
+          "subtitle": "",
+          "text": "",
+          "bullets": [],
+          "notes": "强调汇总统计是表不是四宫格，评委一眼能读。",
+          "image": {
+            "alt": "三张趋势图",
+            "fit": "contain",
+            "caption": "里程 / 配速 / 心率三张趋势图，各一张、各自可读，不做成一张挤在一起的拼图",
+            "assetId": "img-26f8eeb95e1bfb31fc3e7a1ece82f30f36fa0eb9237393c16b41797002cfd2c0"
+          },
+          "id": "d6e0a90a-98cc-487e-85cd-7c00fe70820f"
+        },
+        {
+          "layout": "chart",
+          "kicker": "证据",
+          "title": "60 次记录，1000 米快了 90 秒",
+          "subtitle": "",
+          "text": "",
+          "bullets": [],
+          "notes": "讲法：这条线是「比第一次快到多少」。08-11 那周考试停练，线掉到 -6 秒，成绩真的退了——系统不会替你抹平这件事。10 月底快 90 秒。参考目标线 270 秒是使用者自设刻度，不代表任何官方标准。",
+          "chart": {
+            "kind": "line",
+            "categories": [
+              "08-02",
+              "08-11",
+              "08-22",
+              "09-02",
+              "09-13",
+              "09-24",
+              "10-03",
+              "10-13",
+              "10-30"
+            ],
+            "series": [
+              {
+                "name": "比首次测试快了多少（秒）",
+                "values": [
+                  0,
+                  -6,
+                  18,
+                  36,
+                  36,
+                  42,
+                  60,
+                  72,
+                  90
+                ]
+              }
+            ],
+            "unit": "秒",
+            "caption": "警校模式样例 60 次记录取样：8 月首次 1000 米折算 366 秒，10 月底 276 秒，净快 90 秒；08-11 那周考试停练，成绩退了 6 秒。"
+          },
+          "id": "cc6215c3-86c2-46ed-8516-c64698bfc71c"
+        },
+        {
+          "layout": "table",
+          "kicker": "两种口径，一页说清",
+          "title": "两种口径，一页说清",
+          "rows": [
+            [
+              "模式",
+              "看什么",
+              "怎么给结论"
+            ],
+            [
+              "通用跑者",
+              "里程 / 配速 / 心率",
+              "趋势图 + 汇总表 + 五段方案"
+            ],
+            [
+              "警校考核",
+              "配速折算 1000 米用时",
+              "折算曲线 + 可拖参考线"
+            ],
+            [
+              "同一份记录",
+              "6.2 min/km",
+              "1000 米 372 秒（6 分 12）"
+            ]
+          ],
+          "notes": "评委常问「你凭什么把配速换成 1000 米」，答案就在第三行：6.2 min/km 乘以 1 公里就是 6 分 12 秒，即 372 秒。同一份数据换一种说法，警校考生才看得懂。",
+          "id": "2a1a842f-a0c8-44d7-9f38-546c30bd32e7"
+        },
+        {
+          "layout": "table",
+          "kicker": "边界",
+          "title": "数据再大，也不整包塞给模型",
+          "rows": [
+            [
+              "记录行数",
+              "发给模型的内容",
+              "实测"
+            ],
+            [
+              "≤ 60 行",
+              "清洗后的原始 CSV",
+              "全文发送，结论最细"
+            ],
+            [
+              "＞ 60 行",
+              "分桶统计 + 最近 10 条",
+              "500 行压到 1575 字符"
+            ],
+            [
+              "任何规模",
+              "不传姓名 / 不传位置",
+              "只在本机清洗"
+            ]
+          ],
+          "notes": "这一页回答「500 条记录会不会把上下文撑爆」。超过 60 行就换成摘要：分桶统计加最近 10 条，实测 500 行压到 1575 字符，仍然能给出周期结论。同时说明隐私口径：清洗在本地完成，不向后端传姓名和位置。",
+          "id": "c1a0947b-b6a6-4ca2-8958-40bc80165ec8"
+        },
+        {
+          "layout": "table",
+          "kicker": "技术",
+          "title": "一条数据链路，两次 AI 介入",
+          "rows": [
+            [
+              "环节",
+              "做什么",
+              "AI 是否参与"
+            ],
+            [
+              "采集",
+              "截图 OCR / CSV 读入",
+              "视觉模型（可切离线 OCR）"
+            ],
+            [
+              "清洗",
+              "单位校验、异常标记、人工校正",
+              "否"
+            ],
+            [
+              "指标",
+              "配速折算 1000 米秒数",
+              "否"
+            ],
+            [
+              "决策",
+              "教练知识库 + 大模型定方案",
+              "文本模型"
+            ]
+          ],
+          "notes": "A 类指 AI 在功能里，B 类指 AI 在开发过程里，两个都申报。评委最容易追问「哪一步是 AI、哪一步不是」——这张表就是答案：清洗和指标是确定性的代码，只有采集和决策用了模型。",
+          "id": "7275c1c9-0d27-407d-ad8a-0969e022e67e"
+        },
+        {
+          "layout": "statement",
+          "kicker": "工程",
+          "title": "评委不会看到报错栈。",
+          "subtitle": "断网、无 Key、冷启动都不白屏：30 秒超时降级，OCR 离线跑，3D 可关。",
+          "text": "",
+          "bullets": [],
+          "notes": "兜底能力的证明。两套测试 116 + 22 项断言真实跑通；现场如果网络抖动，停在预置结论页继续讲，不要现场排查。",
+          "id": "ed548899-c5e9-44b6-bdbd-551a7577c0ad"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "现场",
+          "title": "三分钟，正好走完一条链路",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "0:00 打开线上地址，先出预置结论",
+            "0:40 切警校模式，拖参考目标线",
+            "1:20 上传 CSV，看趋势与汇总同步变",
+            "2:10 展开完整评估，指出数据出处",
+            "2:40 关掉 3D 背景，证明不靠特效"
+          ],
+          "notes": "演示卡住时的预案：先讲这一页的节奏，再请评委自己点一次。真断网就停在预置结论页，说明演示模式不需要 Key——这本身就是加分项，不要慌。",
+          "id": "a1a39433-337b-4e1a-82bd-a5fc41330f72"
+        },
+        {
+          "layout": "closing",
+          "kicker": "",
+          "title": "打开就用，30 秒出结论",
+          "subtitle": "runanalyzer-kjvqnr67d357hqecc4ordt.streamlit.app",
+          "text": "源码 github.com/www0255/run.analyzer · 演示模式无需 Key、不依赖现场网络",
+          "bullets": [],
+          "notes": "结尾把链接念出来，请评委当场打开。",
+          "id": "8cb18889-3866-4a1e-ab71-1faa6201561d"
+        }
+      ],
+      "brand": {
+        "name": "RUN ANALYZER",
+        "footer": "RUN ANALYZER · 广西警察学院 72 小时黑客松"
+      }
     }
   ],
   "slides": [
@@ -3003,11 +3277,12 @@
     "note": "文字尺寸与溢出为静态估算；最终请检查 HTML 放映和 PowerPoint / WPS 实际显示。页脚和页码的小字号不计入正文检查。"
   },
   "artifacts": {
-    "html": "80aa4061d7c5664f5bd76203f38fd5fe715bcd4cbf457527df17684f4f5ad093",
-    "pptx": "28e9294e9b9bea96df605ac3ce861842e89d70e2852f6c541f35d0fa823566b0"
+    "html": "9ddb240da7e491ea423ab79965428c0b13b01d78d1b072997cfc02bcccecc125",
+    "pptx": "16a927cfaa590ea286fc958868b62407658f119911b2bcfbe416f9787348e2a0"
   },
   "brand": {
     "name": "RUN ANALYZER",
-    "footer": "RUN ANALYZER · 广西警察学院 72 小时黑客松"
+    "footer": "RUN ANALYZER · 广西警察学院 72 小时黑客松",
+    "logoAssetId": "img-2d95dd6e9afe5fe3f608d619004ba639363bcf17d10bc16802a6a15d951dbfe4"
   }
 }
