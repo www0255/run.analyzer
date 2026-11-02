@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "backend": "native",
+  "rasterEngine": "libreoffice",
+  "source": "saved",
+  "inputPath": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\一页PPT.pptx",
+  "sourceSha256": "f4ffc8af168d4c623b1addef98b6d5ae97c015f3352afe567b5ab0fa2aa8c323",
+  "dpi": 120.00030511888605,
+  "pageCount": 1,
+  "images": [
+    {
+      "index": 1,
+      "page": 1,
+      "path": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\render-one\\artifacts\\pages\\page-0001.png",
+      "width": 1601,
+      "height": 901,
+      "rectangle": {
+        "x": 0,
+        "y": 0,
+        "width": 1280.0666666666666,
+        "height": 720.0666666666667
+      },
+      "byteLength": 257760
+    }
+  ],
+  "missingFonts": []
+}
