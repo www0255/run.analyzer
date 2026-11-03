@@ -1,7 +1,8 @@
 """Run Analyzer：跑步数据分析与体能训练方案生成器。
 
-双模式（通用跑者模式 / 警校体能考核模式）。默认演示模式：直接读取 data/ 下的
-预置分析结果并渲染，不调用任何外部 API，也不需要任何 Key。
+双模式（通用跑者模式 / 警校体能考核模式）。演示模式直接读取 data/ 下的预置分析
+结果并渲染，不调用任何外部 API、不需要任何 Key；它是「没检测到 Key」时的默认值，
+配好 Key 之后打开页面即走真实 AI（勾选仍可随时切回）。
 真实 AI 模式走 OpenAI 兼容 chat.completions，任何异常都会降级为演示结果。
 """
 
@@ -60,7 +61,7 @@ FALLBACK_ANALYSIS = (
 )
 
 DEFAULT_GOAL_SECONDS = 270
-AI_TIMEOUT_SECONDS = 30.0
+AI_TIMEOUT_SECONDS = 90.0  # 云端冷启动 + 大记录压缩摘要后首字延迟可达 60 秒，给足余量
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_MODEL = "gpt-4o-mini"
@@ -75,6 +76,7 @@ WIDGET_MODEL = "ai_model_name"
 WIDGET_VISION_MODEL = "ai_vision_model"
 WIDGET_API_KEY = "ai_api_key_input"
 WIDGET_PRESET = "ai_provider_preset"
+WIDGET_DEMO = "demo_mode_toggle"
 APPLIED_PRESET_KEY = "ai_applied_preset"
 
 # 预设只写这三个输入框的初值；API Key 永远不被预设触碰
@@ -121,14 +123,44 @@ def get_demo_analysis(mode: str) -> str:
         return FALLBACK_ANALYSIS
 
 
+# 也接受嵌套写法（Streamlit Cloud 上很多人习惯分节）：[ai] / [deepseek] 下的同名字段
+SECRET_SECTIONS = ("ai", "deepseek", "openai")
+SECTION_FIELDS = {
+    "base_url": "AI_BASE_URL",
+    "model": "AI_MODEL",
+    "model_name": "AI_MODEL",
+    "vision_model": "VISION_MODEL",
+    "api_key": "AI_API_KEY",
+    "key": "AI_API_KEY",
+}
+
+
 def load_secret_store() -> dict:
-    """一次性读取 st.secrets 里与 AI 相关的项；没有 secrets.toml 时返回空 dict。"""
+    """一次性读取 st.secrets 里与 AI 相关的项；没有 secrets.toml 时返回空 dict。
+
+    同时支持两种写法，谁先出现用谁（顶层优先，避免歧义）：
+        AI_API_KEY = "sk-..."                  # 顶层
+        [ai]                                   # 或分节
+        api_key = "sk-..."
+    """
+    store = {}
     try:
-        values = {name: st.secrets.get(name, "") for name in SECRET_NAMES}
+        for name in SECRET_NAMES:
+            value = str(st.secrets.get(name, "") or "").strip()
+            if value:
+                store[name] = value
+        for section in SECRET_SECTIONS:
+            block = st.secrets.get(section)
+            if not hasattr(block, "get"):
+                continue
+            for field, target in SECTION_FIELDS.items():
+                value = str(block.get(field, "") or "").strip()
+                if value and target not in store:
+                    store[target] = value
     except Exception as exc:  # noqa: BLE001 - 没有 secrets.toml 时访问 st.secrets 会抛错
         logger.info("未读取到 st.secrets: error=%s", type(exc).__name__)
         return {}
-    return {name: str(value or "").strip() for name, value in values.items() if str(value or "").strip()}
+    return store
 
 
 def provider_label(base_url: str) -> str:
@@ -570,15 +602,35 @@ def apply_provider_preset(preset: str) -> None:
     st.session_state.update(PROVIDER_PRESETS[preset])
 
 
+def ai_status_line(detected: dict, demo_mode: bool, has_manual_key: bool = False) -> str:
+    """侧边栏一行状态：现在到底走哪条路、Key 从哪来。"""
+    if demo_mode:
+        return "当前：演示模式，读预置结果，不联网、不消耗额度。"
+    if has_manual_key:
+        return "当前：真实 AI，Key 来自上方输入框（仅本次会话有效）。"
+    if detected["has_secret_key"]:
+        return "当前：真实 AI，Key 来自 Secrets（{0}），重启也不会丢。".format(detected["key_source"])
+    return "当前：真实 AI，但还没拿到 Key —— 请在上方填写。"
+
+
 def render_sidebar() -> tuple:
     with st.sidebar:
         st.header("分析模式")
         mode = st.radio("选择模式", MODE_OPTIONS, index=0)
-        demo_mode = st.checkbox("演示模式（不调用任何外部 API）", value=True)
 
         st.markdown("---")
         st.header("AI 设置")
         detected = load_ai_config()
+
+        # 演示模式的初值跟着「有没有可用 Key」走，而不是写死 True：
+        # 配好 Secrets 之后打开页面就直接走真实 AI，不用每次手动取消勾选；
+        # 没有 Key 的环境仍然默认演示，保证零配置也能看。勾选始终可以手动改回来。
+        st.session_state.setdefault(WIDGET_DEMO, not detected["has_secret_key"])
+        demo_mode = st.checkbox(
+            "演示模式（不调用任何外部 API）",
+            key=WIDGET_DEMO,
+            help="未检测到 API Key 时默认开启；配置好 Key 后默认关闭，该复选框只是开关，不会清空你的 Key。",
+        )
 
         preset_options = list(PROVIDER_PRESETS) + [PRESET_CUSTOM]
         detected_label = provider_label(detected["base_url"]) if detected["has_secret_key"] else PRESET_CUSTOM
@@ -603,7 +655,10 @@ def render_sidebar() -> tuple:
         api_key_input = st.text_input(
             "API Key", type="password", key=WIDGET_API_KEY, placeholder="仅真实 AI 模式需要"
         )
-        st.caption("演示模式无需填写 API Key；也可写进 .streamlit/secrets.toml（内容不会显示、不会写日志）。")
+        st.caption(
+            ai_status_line(detected, demo_mode, bool(api_key_input.strip()))
+            + " 也可写进 .streamlit/secrets.toml —— 内容不显示、不写日志。"
+        )
 
         st.markdown("---")
         st.header("空间背景")
@@ -807,7 +862,12 @@ def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings:
         return
 
     if not st.button("生成分析与训练计划", type="primary"):
-        st.caption("点击按钮后调用真实大模型；任何异常都会自动降级为演示结果。")
+        st.caption(
+            "点击按钮调用真实大模型（{0} · {1}），最长等待 {2:.0f} 秒；"
+            "任何异常都会自动降级为演示结果。".format(
+                provider_label(settings["base_url"]), settings["model_name"], AI_TIMEOUT_SECONDS
+            )
+        )
         return
 
     payload, compressed = build_ai_payload(df, mode, goal_seconds)
@@ -818,7 +878,7 @@ def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings:
         )
     messages = coach.build_messages(mode, build_stats_text(df, mode, goal_seconds), payload, goal_seconds)
     try:
-        with st.spinner("AI 分析中，最长等待 30 秒..."):
+        with st.spinner("AI 分析中，最长等待 {0:.0f} 秒...".format(AI_TIMEOUT_SECONDS)):
             text = call_ai(settings["base_url"], settings["model_name"], settings["api_key"], messages, mode)
     except Exception as exc:  # noqa: BLE001 - 真实模式必须降级而不能崩溃
         logger.warning("AI 调用失败，降级为演示结果: mode=%s error=%s detail=%s", mode, type(exc).__name__, exc)
