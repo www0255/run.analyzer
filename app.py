@@ -13,6 +13,7 @@ import inspect
 import json
 import re
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -24,6 +25,7 @@ import streamlit as st
 
 import coach_knowledge as coach
 import ocr_convert
+import record_store
 import theme
 import training_metrics as metrics
 
@@ -55,6 +57,8 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DEMO_ANALYSIS_FILE = DATA_DIR / "demo_analysis_general.json"
 FALLBACK_ANALYSIS = "预置样例结果读取失败：请确认 data/demo_analysis_general.json 存在且为合法 JSON。"
+RECORDS_DIR = BASE_DIR / "records"
+RECORD_FILE = Path(os.environ.get("RA_RECORD_FILE") or (RECORDS_DIR / "history.csv"))
 
 AI_TIMEOUT_SECONDS = 90.0  # 云端冷启动 + 大记录压缩摘要后首字延迟可达 60 秒，给足余量
 
@@ -973,6 +977,71 @@ _EDITOR_KWARGS = (
 )
 
 
+RECORD_FRAME = "record_library"
+RECORD_BATCH = "record_batch"
+RECORD_NOTICE = "record_notice"
+RECORD_SCOPE = "record_scope"
+RECORD_SCOPE_SEEN = "record_scope_seen"
+ACTIVE_SCOPE = "active_scope"
+CLEAR_ARMED = "clear_armed"
+
+
+def record_library() -> pd.DataFrame:
+    """记录库的唯一读入口：本次会话首次访问时尝试从 records/history.csv 恢复。"""
+    if RECORD_FRAME not in st.session_state:
+        st.session_state[RECORD_FRAME] = record_store.load_file(RECORD_FILE)
+    frame = st.session_state[RECORD_FRAME]
+    return frame if isinstance(frame, pd.DataFrame) else record_store.empty_frame()
+
+
+def store_library(frame: pd.DataFrame) -> None:
+    """写内存 + 尽力落盘（云端临时磁盘写失败也不影响页面）。"""
+    st.session_state[RECORD_FRAME] = frame
+    record_store.save_file(RECORD_FILE, frame)
+
+
+def add_screenshot_records(frame: pd.DataFrame, count: int) -> str:
+    """把一批识别结果并进记录库（按指纹去重），返回给用户看的一句话。"""
+    batch = record_store.new_batch_id()
+    label = "{0} · {1} 张截图".format(record_store.now_text(), count)
+    incoming = record_store.prepare(frame, batch, label, "截图识别")
+    library, added, skipped = record_store.merge(record_library(), incoming)
+    if added:
+        st.session_state[RECORD_BATCH] = batch
+        store_library(library)
+        st.session_state.pop(EDITOR_KEY, None)
+    message = "已并入记录库：新增 {0} 条".format(added)
+    if skipped:
+        message += "，跳过 {0} 条重复记录".format(skipped)
+    return message
+
+
+def record_scope_options() -> list:
+    return record_store.scope_options(record_library(), st.session_state.get(RECORD_BATCH))
+
+
+def record_scope_label(scope: str) -> str:
+    for value, label in record_scope_options():
+        if value == scope:
+            return label
+    return "全部历史"
+
+
+def render_record_scope() -> str:
+    """右上角的历史记录选择器：全部历史 / 仅本次上传 / 最近 10 条 / 单个批次。"""
+    options = record_scope_options()
+    ids = [item[0] for item in options]
+    labels = dict(options)
+    if st.session_state.get(RECORD_SCOPE) not in ids:
+        st.session_state.pop(RECORD_SCOPE, None)      # 选项变了（记录被删/批次消失）就回到默认
+    return st.selectbox(
+        "历史记录范围",
+        ids,
+        format_func=lambda value: labels.get(value, value),
+        key=RECORD_SCOPE,
+    )
+
+
 def convert_screenshots(payloads: list) -> tuple:
     """逐张离线识别；单张失败不拖垮整批。返回 (DataFrame, 提示列表, 失败说明列表)。"""
     records, notes, failures = [], [], []
@@ -1011,8 +1080,8 @@ def render_engine_diagnostics() -> None:
 
 
 def render_screenshot_entry(settings: dict):
-    """主入口：上传截图 -> 离线/视觉识别 -> 人工校正 -> 导出 CSV 或接入分析。"""
-    st.caption("截图模式：一张图 = 一次跑步，可一次选多张")
+    """主入口：上传截图 -> 离线/视觉识别 -> 并入记录库 -> 人工校正 -> 导出或接入分析。"""
+    st.caption("截图模式：一张图 = 一次跑步，可一次选多张；识别结果会并入下方的记录库")
     uploaded = st.file_uploader(
         "选择跑步记录截图（PNG / JPG）",
         type=["png", "jpg", "jpeg"],
@@ -1020,73 +1089,137 @@ def render_screenshot_entry(settings: dict):
         key="screenshot_uploader",
     )
     render_engine_diagnostics()
-    if not uploaded:
+
+    if uploaded:
+        payloads = [(item.name, item.getvalue()) for item in uploaded]
+        signature = "|".join("{0}:{1}".format(name, len(data)) for name, data in payloads)
+        if st.session_state.get(SCREENSHOT_SIGNATURE) != signature:
+            with st.spinner("正在离线识别截图（本地推理，不联网）..."):
+                frame, notes, failures = convert_screenshots(payloads)
+            st.session_state[SCREENSHOT_FRAME] = frame
+            st.session_state[SCREENSHOT_NOTES] = notes
+            st.session_state[SCREENSHOT_FAILURES] = failures
+            st.session_state[SCREENSHOT_SIGNATURE] = signature
+            st.session_state[RECORD_NOTICE] = add_screenshot_records(frame, len(payloads))
+
+        for failure in st.session_state.get(SCREENSHOT_FAILURES) or []:
+            st.warning(failure)
+        for note in st.session_state.get(SCREENSHOT_NOTES) or []:
+            st.info(note)
+        if st.session_state.get(RECORD_NOTICE):
+            st.success(st.session_state[RECORD_NOTICE])
+
+        vision_model = (settings.get("vision_model") or settings.get("model_name") or "").strip()
+        st.caption("当前视觉模型：{0}".format(vision_model or "未设置"))
+        if st.button("🤖 用大模型识别（更准，需联网）", key="vision_button"):
+            guard_message = vision_guard_message(vision_model)
+            if guard_message:
+                st.warning(guard_message)      # 模型能力不够就只提示，连请求都不发
+            else:
+                rows, messages = [], []
+                for index, (name, data) in enumerate(payloads, start=1):
+                    vision_frame, vision_error = ocr_convert.vision_extract(
+                        data, settings["base_url"], vision_model, settings["api_key"]
+                    )
+                    if vision_frame is None:
+                        messages.append("第 {0} 张（{1}）：{2}".format(index, name, vision_error))
+                    else:
+                        rows.append(vision_frame)
+                if rows:
+                    merged = pd.concat(rows, ignore_index=True)[ocr_convert.COLUMNS]
+                    st.session_state[SCREENSHOT_FRAME] = merged
+                    st.session_state[RECORD_NOTICE] = add_screenshot_records(merged, len(rows))
+                    st.success("大模型识别完成，已并入记录库，请在下面的表格里继续核对。")
+                for message in messages:
+                    st.warning(message)
+    elif not record_library().empty:
+        st.caption("没有新截图也可以继续看记录库：下面这张表是之前识别并保存下来的记录。")
+    else:
         st.caption("支持跑步 App 的「运动记录详情页」截图。识别后请先在表格里核对，再点「用这份数据开始分析」。")
+
+    library = record_library()
+    if library.empty:
         return None
 
-    payloads = [(item.name, item.getvalue()) for item in uploaded]
-    signature = "|".join("{0}:{1}".format(name, len(data)) for name, data in payloads)
-    if st.session_state.get(SCREENSHOT_SIGNATURE) != signature:
-        with st.spinner("正在离线识别截图（本地推理，不联网）..."):
-            frame, notes, failures = convert_screenshots(payloads)
-        st.session_state[SCREENSHOT_FRAME] = frame
-        st.session_state[SCREENSHOT_NOTES] = notes
-        st.session_state[SCREENSHOT_FAILURES] = failures
-        st.session_state[SCREENSHOT_SIGNATURE] = signature
+    head_left, head_right = st.columns([1, 1.05])
+    with head_left:
+        st.markdown("**记录库**")
+    with head_right:
+        scope = render_record_scope()
+    view = record_store.subset(library, scope)
+    st.caption(
+        "已累积 {0} 次跑步 · 当前显示 {1} 条；在表格里改数值或删行都会同步进记录库，"
+        "切换范围只是换个看法，不会丢记录。".format(len(library), len(view))
+    )
 
-    for failure in st.session_state.get(SCREENSHOT_FAILURES) or []:
-        st.warning(failure)
-    for note in st.session_state.get(SCREENSHOT_NOTES) or []:
-        st.info(note)
-
-    vision_model = (settings.get("vision_model") or settings.get("model_name") or "").strip()
-    st.caption("当前视觉模型：{0}".format(vision_model or "未设置"))
-    if st.button("🤖 用大模型识别（更准，需联网）", key="vision_button"):
-        guard_message = vision_guard_message(vision_model)
-        if guard_message:
-            st.warning(guard_message)      # 模型能力不够就只提示，连请求都不发
-        else:
-            rows, messages = [], []
-            for index, (name, data) in enumerate(payloads, start=1):
-                vision_frame, vision_error = ocr_convert.vision_extract(
-                    data, settings["base_url"], vision_model, settings["api_key"]
-                )
-                if vision_frame is None:
-                    messages.append("第 {0} 张（{1}）：{2}".format(index, name, vision_error))
-                else:
-                    rows.append(vision_frame)
-            if rows:
-                st.session_state[SCREENSHOT_FRAME] = pd.concat(rows, ignore_index=True)[ocr_convert.COLUMNS]
-                st.session_state.pop(EDITOR_KEY, None)      # 换引擎后丢弃旧表格编辑态
-                st.success("大模型识别完成，请在下面的表格里继续核对。")
-            for message in messages:
-                st.warning(message)
+    if st.session_state.get(RECORD_SCOPE_SEEN) != scope:
+        st.session_state[RECORD_SCOPE_SEEN] = scope
+        st.session_state.pop(EDITOR_KEY, None)      # 换范围后重建表格，丢掉上一个范围的编辑态
 
     st.warning("OCR 可能出错，请核对后再使用：表格可以直接改，也可以增删行。")
     edited = st.data_editor(
-        st.session_state.get(SCREENSHOT_FRAME),
+        view[record_store.COLUMNS],
         num_rows="dynamic",
         key=EDITOR_KEY,
         **_EDITOR_KWARGS,
     )
 
-    column_download, column_apply = st.columns(2)
+    if isinstance(edited, pd.DataFrame):
+        batch = st.session_state.get(RECORD_BATCH) or record_store.new_batch_id()
+        updated = record_store.replace_scope(
+            library,
+            scope,
+            edited,
+            batch,
+            "表格校正 · {0}".format(record_store.now_text()),
+            "手工校正",
+        )
+        if not record_store.same(updated, library):
+            store_library(updated)
+            library = updated
+            view = record_store.subset(library, scope)
+
+    column_download, column_apply, column_clear = st.columns([1.7, 1.35, 0.95])
+    with column_clear:
+        if st.session_state.get(CLEAR_ARMED):
+            confirm_col, cancel_col = st.columns(2)
+            with confirm_col:
+                if st.button("确认", key="clear_records_yes", type="primary",
+                             help="真的删除记录库里的全部历史"):
+                    store_library(record_store.empty_frame())
+                    for key in (RECORD_SCOPE, RECORD_SCOPE_SEEN, ACTIVE_SCOPE, ACTIVE_FRAME,
+                                SCREENSHOT_SIGNATURE, CLEAR_ARMED):
+                        st.session_state.pop(key, None)
+                    st.session_state.pop(EDITOR_KEY, None)
+                    st.rerun()
+            with cancel_col:
+                if st.button("取消", key="clear_records_no"):
+                    st.session_state.pop(CLEAR_ARMED, None)
+                    st.rerun()
+        elif st.button("清空", key="clear_records", help="删除记录库里的全部历史，回到仓库内置样例"):
+            st.session_state[CLEAR_ARMED] = True
+            st.rerun()
     with column_download:
         st.download_button(
-            "⬇️ 导出 CSV（UTF-8 BOM，Excel 可直接打开）",
-            data=ocr_convert.frame_to_csv_bytes(edited),
-            file_name="run_records_from_screenshot.csv",
+            "⬇️ 导出当前范围 CSV",
+            data=record_store.csv_bytes(view),
+            file_name="run_records_history.csv",
             mime="text/csv",
-            key="download_screenshot_csv",
+            key="download_records_csv",
+            help="UTF-8 BOM 编码，Excel 双击即可打开，不会中文乱码",
         )
     with column_apply:
-        if st.button("✅ 用这份数据开始分析", type="primary", key="apply_screenshot_data"):
-            st.session_state[ACTIVE_FRAME] = edited.copy()
-            st.success("已使用这份校正后的数据，下方图表与统计已切换。")
+        if st.button("✅ 用这份数据开始分析", type="primary", key="apply_screenshot_data",
+                     help="下方图表与统计随后只使用当前选中的范围"):
+            st.session_state[ACTIVE_SCOPE] = scope
+            st.session_state[ACTIVE_FRAME] = record_store.to_analysis(view)
+            st.success("已按「{0}」开始分析，下方图表与统计已切换。".format(record_scope_label(scope)))
 
-    if st.session_state.get(ACTIVE_FRAME) is None:
-        st.caption("提示：点「用这份数据开始分析」之后，下方的图表与统计才会改用这份数据。")
-    return edited
+    if st.session_state.get(CLEAR_ARMED):
+        st.warning("再点「确认」才会真的清空记录库；点「取消」保留全部记录。")
+    elif st.session_state.get(ACTIVE_SCOPE) is None:
+        st.caption("提示：下方图表与统计默认使用「全部历史（{0} 条）」；选中某个范围再点按钮，就只看这一段记录。".format(len(library)))
+    return view
 
 
 def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings: dict) -> None:
@@ -1164,16 +1297,29 @@ def main() -> None:
     else:
         st.info("真实 AI 模式：将调用外部大模型接口，失败时自动降级为演示结果。")
 
-    source = csv_source if csv_source is not None else fallback_source()
-
+    library = record_library()
+    active_scope = st.session_state.get(ACTIVE_SCOPE)
     active_frame = st.session_state.get(ACTIVE_FRAME)
-    if active_frame is not None:
+
+    if csv_source is not None:
+        st.markdown("#### 📄 当前分析数据：本次上传的 CSV")
+        df, notes, error = load_run_data(csv_source)
+    elif active_scope:
+        view = record_store.subset(library, active_scope)
+        st.markdown("#### ✅ 当前分析数据：记录库 · {0}".format(record_scope_label(active_scope)))
+        df, notes, error = clean_run_dataframe(record_store.to_analysis(view))
+    elif not library.empty:
+        st.markdown("#### ✅ 当前分析数据：记录库全部历史（{0} 条）".format(len(library)))
+        df, notes, error = clean_run_dataframe(record_store.to_analysis(library))
+    elif active_frame is not None:
         st.markdown("#### ✅ 当前分析数据：截图识别 + 人工校正结果")
         df, notes, error = clean_run_dataframe(active_frame)
-    elif source is not None:
-        df, notes, error = load_run_data(source)
     else:
-        st.info("上传 run_data.csv 开始分析（仓库内置样例数据不可用）。")
+        source = fallback_source()
+        if source is not None:
+            df, notes, error = load_run_data(source)
+        else:
+            st.info("上传 run_data.csv 开始分析（仓库内置样例数据不可用）。")
 
     for note in notes:
         st.warning(note)

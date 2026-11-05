@@ -33,3 +33,6 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# 记录库：识别累积的本机历史（个人跑步数据），绝不进公开仓库
+records/

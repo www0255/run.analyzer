@@ -3,7 +3,9 @@
 运行：python tests/test_app_regression.py
 """
 
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -14,6 +16,12 @@ sys.path.insert(0, str(ROOT))
 
 APP = str(ROOT / "app.py")
 FAILED = []
+
+# 测试要可复现：把记录库指到一个空文件，别让本机 records/history.csv 抢走数据源
+# （[9] 会临时改成自己的文件，结束后恢复这里）
+ISOLATED_RECORDS = str(Path(tempfile.gettempdir()) / "ra_test_no_records.csv")
+Path(ISOLATED_RECORDS).unlink(missing_ok=True)
+os.environ["RA_RECORD_FILE"] = ISOLATED_RECORDS
 
 
 def expect(condition, label, detail=""):
@@ -228,6 +236,84 @@ def case_smooth_chart_and_large_data():
     expect(small_figure.data[0].mode == "lines+markers", "小数据仍保留记号点", str(small_figure.data[0].mode))
 
 
+def case_record_library():
+    """记录库：多次识别的结果要累积成一张表，并能按范围切换。"""
+    print("[9] 记录库累积与历史范围切换")
+    import os
+    import tempfile
+    import record_store
+
+    target = Path(tempfile.gettempdir()) / "ra_test_records.csv"
+    if target.exists():
+        target.unlink()
+
+    library = record_store.empty_frame()
+    first = pd.DataFrame({
+        "日期": ["2026-10-05", "2026-10-01"],
+        "里程(km)": [5.0, 3.0],
+        "时长(分钟)": [33.0, 21.0],
+        "配速(min/km)": [6.6, 7.0],
+        "平均心率": [142, 140],
+    })
+    second = pd.DataFrame({
+        "日期": ["2026-10-03"],
+        "里程(km)": [3.5],
+        "时长(分钟)": [24.0],
+        "配速(min/km)": [6.86],
+        "平均心率": [138],
+    })
+    library, added_first, _ = record_store.merge(
+        library, record_store.prepare(first, "b1", "2026-11-05 22:30 · 2 张截图", "截图识别"))
+    library, added_second, _ = record_store.merge(
+        library, record_store.prepare(second, "b2", "2026-11-05 22:40 · 1 张截图", "截图识别"))
+    expect(added_first == 2 and added_second == 1, "两批识别结果都进了记录库", str(len(library)))
+    expect(list(library["日期"]) == ["2026-10-01", "2026-10-03", "2026-10-05"],
+           "记录库按日期升序排列（不按录入顺序）", str(list(library["日期"])))
+    duped, added_dup, skipped_dup = record_store.merge(
+        library, record_store.prepare(second, "b9", "重复批次", "截图识别"))
+    expect(added_dup == 0 and skipped_dup == 1 and len(duped) == 3, "重复记录按指纹跳过",
+           "{0}/{1}".format(added_dup, skipped_dup))
+
+    # 只删本范围的编辑不能动别的批次
+    edited = pd.DataFrame({
+        "日期": ["2026-10-03"],
+        "里程(km)": [4.2],
+        "时长(分钟)": [27.0],
+        "配速(min/km)": [6.43],
+        "平均心率": [139],
+    })
+    replaced = record_store.replace_scope(library, record_store.BATCH_PREFIX + "b2", edited, "bX", "表格校正")
+    expect(len(replaced) == 3, "按批次替换后总行数不变", str(len(replaced)))
+    kept = replaced[replaced[record_store.META_BATCH] == "b1"]
+    expect(len(kept) == 2 and list(kept["里程(km)"]) == [3.0, 5.0], "别的批次一字未动")
+
+    record_store.save_file(target, library)
+    expect(target.exists(), "记录库能落盘到 CSV")
+
+    os.environ["RA_RECORD_FILE"] = str(target)
+    try:
+        at = AppTest.from_file(APP, default_timeout=120).run()
+    finally:
+        os.environ["RA_RECORD_FILE"] = ISOLATED_RECORDS
+
+    expect(not at.exception, "带记录库启动无异常", [str(e) for e in at.exception])
+    body = texts(at)
+    expect("已累积 3 次跑步" in body, "表格默认展示累积记录（不是只看本次）")
+    expect("#### ✅ 当前分析数据：记录库全部历史（3 条）" in body, "分析数据默认取记录库全部历史")
+
+    scope = [box for box in at.selectbox if str(box.label) == "历史记录范围"]
+    expect(len(scope) == 1, "右上角存在历史记录范围选择器")
+    if scope:
+        options = [str(value) for value in scope[0].options]
+        expect(options[0] == "全部历史（3 条）", "范围选项第一项是全部历史", str(options))
+        expect(any("2 张截图" in option for option in options), "范围选项里能看到批次", str(options))
+        scope[0].set_value(record_store.BATCH_PREFIX + "b2").run()
+        expect("当前显示 1 条" in texts(at), "切到单批次后只剩那一条")
+
+    target.unlink()
+    return at
+
+
 if __name__ == "__main__":
     case_demo_general()
     case_heart_rate_optional()
@@ -237,6 +323,7 @@ if __name__ == "__main__":
     case_real_mode_without_key()
     case_upload_and_vision_without_key()
     case_smooth_chart_and_large_data()
+    case_record_library()
     print("=" * 60)
     if FAILED:
         print("FAILED:", FAILED)
