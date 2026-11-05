@@ -4,14 +4,14 @@
   "rasterEngine": "libreoffice",
   "source": "saved",
   "inputPath": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\答辩多页PPT-dsh.pptx",
-  "sourceSha256": "270200061326e1061e5a27b48651bef25dae30808b4de60d09a1d30caf167c35",
+  "sourceSha256": "a5dac86f9d8d2842b14abac665c76fc1cc69b2bf09568b1106c27afe4d914547",
   "dpi": 108,
   "pageCount": 12,
   "images": [
     {
       "index": 1,
       "page": 1,
-      "path": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\render-预览-4\\artifacts\\pages\\page-0001.png",
+      "path": "C:\\Users\\1\\AppData\\Local\\Temp\\prev-r10\\artifacts\\pages\\page-0001.png",
       "width": 1441,
       "height": 811,
       "rectangle": {
@@ -20,12 +20,12 @@
         "width": 1280.0666666666666,
         "height": 720.0666666666667
       },
-      "byteLength": 59463
+      "byteLength": 49198
     },
     {
       "index": 2,
       "page": 2,
-      "path": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\render-预览-4\\artifacts\\pages\\page-0002.png",
+      "path": "C:\\Users\\1\\AppData\\Local\\Temp\\prev-r10\\artifacts\\pages\\page-0002.png",
       "width": 1441,
       "height": 811,
       "rectangle": {
@@ -34,12 +34,12 @@
         "width": 1280.0666666666666,
         "height": 720.0666666666667
       },
-      "byteLength": 52872
+      "byteLength": 42652
     },
     {
       "index": 3,
       "page": 3,
-      "path": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\render-预览-4\\artifacts\\pages\\page-0003.png",
+      "path": "C:\\Users\\1\\AppData\\Local\\Temp\\prev-r10\\artifacts\\pages\\page-0003.png",
       "width": 1441,
       "height": 811,
       "rectangle": {
@@ -48,12 +48,12 @@
         "width": 1280.0666666666666,
         "height": 720.0666666666667
       },
-      "byteLength": 101245
+      "byteLength": 92805
     },
     {
       "index": 4,
       "page": 4,
-      "path": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\render-预览-4\\artifacts\\pages\\page-0004.png",
+      "path": "C:\\Users\\1\\AppData\\Local\\Temp\\prev-r10\\artifacts\\pages\\page-0004.png",
       "width": 1441,
       "height": 811,
       "rectangle": {
@@ -62,12 +62,12 @@
         "width": 1280.0666666666666,
         "height": 720.0666666666667
       },
-      "byteLength": 283315
+      "byteLength": 273583
     },
     {
       "index": 5,
       "page": 5,
-      "path": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\render-预览-4\\artifacts\\pages\\page-0005.png",
+      "path": "C:\\Users\\1\\AppData\\Local\\Temp\\prev-r10\\artifacts\\pages\\page-0005.png",
       "width": 1441,
       "height": 811,
       "rectangle": {
@@ -76,12 +76,12 @@
         "width": 1280.0666666666666,
         "height": 720.0666666666667
       },
-      "byteLength": 239920
+      "byteLength": 230082
     },
     {
       "index": 6,
       "page": 6,
-      "path": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\render-预览-4\\artifacts\\pages\\page-0006.png",
+      "path": "C:\\Users\\1\\AppData\\Local\\Temp\\prev-r10\\artifacts\\pages\\page-0006.png",
       "width": 1441,
       "height": 811,
       "rectangle": {
@@ -90,12 +90,12 @@
         "width": 1280.0666666666666,
         "height": 720.0666666666667
       },
-      "byteLength": 84312
+      "byteLength": 68379
     },
     {
       "index": 7,
       "page": 7,
-      "path": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\render-预览-4\\artifacts\\pages\\page-0007.png",
+      "path": "C:\\Users\\1\\AppData\\Local\\Temp\\prev-r10\\artifacts\\pages\\page-0007.png",
       "width": 1441,
       "height": 811,
       "rectangle": {
@@ -104,12 +104,12 @@
         "width": 1280.0666666666666,
         "height": 720.0666666666667
       },
-      "byteLength": 76071
+      "byteLength": 84612
     },
     {
       "index": 8,
       "page": 8,
-      "path": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\render-预览-4\\artifacts\\pages\\page-0008.png",
+      "path": "C:\\Users\\1\\AppData\\Local\\Temp\\prev-r10\\artifacts\\pages\\page-0008.png",
       "width": 1441,
       "height": 811,
       "rectangle": {
@@ -118,12 +118,12 @@
         "width": 1280.0666666666666,
         "height": 720.0666666666667
       },
-      "byteLength": 85235
+      "byteLength": 74772
     },
     {
       "index": 9,
       "page": 9,
-      "path": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\render-预览-4\\artifacts\\pages\\page-0009.png",
+      "path": "C:\\Users\\1\\AppData\\Local\\Temp\\prev-r10\\artifacts\\pages\\page-0009.png",
       "width": 1441,
       "height": 811,
       "rectangle": {
@@ -132,12 +132,12 @@
         "width": 1280.0666666666666,
         "height": 720.0666666666667
       },
-      "byteLength": 89880
+      "byteLength": 81870
     },
     {
       "index": 10,
       "page": 10,
-      "path": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\render-预览-4\\artifacts\\pages\\page-0010.png",
+      "path": "C:\\Users\\1\\AppData\\Local\\Temp\\prev-r10\\artifacts\\pages\\page-0010.png",
       "width": 1441,
       "height": 811,
       "rectangle": {
@@ -146,12 +146,12 @@
         "width": 1280.0666666666666,
         "height": 720.0666666666667
       },
-      "byteLength": 57986
+      "byteLength": 49491
     },
     {
       "index": 11,
       "page": 11,
-      "path": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\render-预览-4\\artifacts\\pages\\page-0011.png",
+      "path": "C:\\Users\\1\\AppData\\Local\\Temp\\prev-r10\\artifacts\\pages\\page-0011.png",
       "width": 1441,
       "height": 811,
       "rectangle": {
@@ -160,12 +160,12 @@
         "width": 1280.0666666666666,
         "height": 720.0666666666667
       },
-      "byteLength": 84784
+      "byteLength": 72194
     },
     {
       "index": 12,
       "page": 12,
-      "path": "C:\\Users\\1\\Desktop\\run.analyzer\\hackathon\\render-预览-4\\artifacts\\pages\\page-0012.png",
+      "path": "C:\\Users\\1\\AppData\\Local\\Temp\\prev-r10\\artifacts\\pages\\page-0012.png",
       "width": 1441,
       "height": 811,
       "rectangle": {
@@ -174,7 +174,7 @@
         "width": 1280.0666666666666,
         "height": 720.0666666666667
       },
-      "byteLength": 64579
+      "byteLength": 42203
     }
   ],
   "missingFonts": []

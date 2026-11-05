@@ -22,7 +22,6 @@ TEXT_MUTED = "#8F9298"    # 次要文字
 SILVER = "#D3D7DD"        # 主数据线（冷银）
 SILVER_DIM = "#7C8188"    # 次数据线
 STEEL = "#6C8199"         # 心率（低饱和钢蓝，唯一有色相的数据）
-GOAL = "#A8AEB6"          # 参考目标线（浅灰虚线）
 DANGER = "#C4756B"        # 风险提示（低饱和砖红）
 LOAD_SHORT = "#6C8199"    # 短期负荷（钢蓝）
 LOAD_LONG = "#C9B37E"     # 长期负荷（哑光黄）
@@ -399,7 +398,7 @@ def section_title(text: str) -> None:
     st.markdown('<div class="ra-h3d">%s</div>' % text, unsafe_allow_html=True)
 
 
-def render_header(subtitle: str = "跑步记录 → 趋势与跑量 → 训练方案 · 通用跑者") -> None:
+def render_header(subtitle: str = "跑步记录 → 趋势与跑量 → 月度复盘与能力档案 → 训练方案") -> None:
     st.markdown(
         '<div class="ra-hero">'
         '<div class="ra-kicker">跑步数据分析与体能训练方案生成器</div>'

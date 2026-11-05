@@ -3,15 +3,15 @@
   "producer": "dsh-ppt-render",
   "status": "rendered",
   "visual": "not-verified",
-  "createdAt": "2026-11-02T13:51:40.749Z",
+  "createdAt": "2026-11-05T14:39:57.403Z",
   "renderer": {
     "package": "@deepseek-ai/libreoffice-kit",
     "version": "0.1.5",
     "backend": "native"
   },
   "source": {
-    "sha256": "270200061326e1061e5a27b48651bef25dae30808b4de60d09a1d30caf167c35",
-    "byteLength": 446329
+    "sha256": "a5dac86f9d8d2842b14abac665c76fc1cc69b2bf09568b1106c27afe4d914547",
+    "byteLength": 536094
   },
   "format": "png",
   "slideCount": 12,
@@ -20,103 +20,103 @@
     {
       "page": 1,
       "file": "pages/page-0001.png",
-      "byteLength": 59463,
-      "sha256": "e378ec80931529eb18defc3249775f9d162128b800883d7265054a074c128259",
+      "byteLength": 49198,
+      "sha256": "e0a0ee9b08904f46ae12c8fbe0ce70c8d9a19d8c09a303fecafe6f9a246f0cd9",
       "width": 1441,
       "height": 811
     },
     {
       "page": 2,
       "file": "pages/page-0002.png",
-      "byteLength": 52872,
-      "sha256": "62b38a0cbe5788054ee8a3250585a8bd9bf8a8ce17aa4795b7fcb2f40526c0d4",
+      "byteLength": 42652,
+      "sha256": "71b32a5400755f08e05e169b625049965458489d5a0af4f89d5a95287ef969bf",
       "width": 1441,
       "height": 811
     },
     {
       "page": 3,
       "file": "pages/page-0003.png",
-      "byteLength": 101245,
-      "sha256": "9c25d491c8fae82d6db7f13419908a0d1ea5070b611b32e5012a91567747e4ad",
+      "byteLength": 92805,
+      "sha256": "50ee55b1212337bf614eda3c97ca8c8f9aadfd06263add575d991a9e3a18a863",
       "width": 1441,
       "height": 811
     },
     {
       "page": 4,
       "file": "pages/page-0004.png",
-      "byteLength": 283315,
-      "sha256": "6f92c2bf7e55946f4abada30b5a4c132fe0b86c12e4b7b7594d4625a00e36c0f",
+      "byteLength": 273583,
+      "sha256": "f53c066335c27c1f16f4f20cc7b4444d52f7914f92796175693570b18b319f69",
       "width": 1441,
       "height": 811
     },
     {
       "page": 5,
       "file": "pages/page-0005.png",
-      "byteLength": 239920,
-      "sha256": "f8d3a2e7cc78795d540fc1d299345a229c4b0ae3793fd53bc00d0d24ba7707ca",
+      "byteLength": 230082,
+      "sha256": "2fcf67225eeaaf64010f7eff44a45f4d244625eb6337aab4a5d6724a749f62fb",
       "width": 1441,
       "height": 811
     },
     {
       "page": 6,
       "file": "pages/page-0006.png",
-      "byteLength": 84312,
-      "sha256": "9e6742276adf73cb74b263ed83ac48ec630329d42aecec0e39628b622061f46f",
+      "byteLength": 68379,
+      "sha256": "372005bcf049c2cd24551d91c626708df1b418623ce74349ccadf885fba9554f",
       "width": 1441,
       "height": 811
     },
     {
       "page": 7,
       "file": "pages/page-0007.png",
-      "byteLength": 76071,
-      "sha256": "21a8ad8b9960128910bdc59c75e066f4926c3793fbd7ea2c7ae13744b55cd0d5",
+      "byteLength": 84612,
+      "sha256": "0d929b8ee3194b86683e606472dea2e0abfade4d7ee1658e5c81820542d22d5c",
       "width": 1441,
       "height": 811
     },
     {
       "page": 8,
       "file": "pages/page-0008.png",
-      "byteLength": 85235,
-      "sha256": "a339f75337aba39f992e8faa065024efd7ebc55a72da6afa2717ee0f4b139ca9",
+      "byteLength": 74772,
+      "sha256": "ab40324e52d912bc7d3936a0d55540154dfd7ed3f9d6cb9fd6878011bd866771",
       "width": 1441,
       "height": 811
     },
     {
       "page": 9,
       "file": "pages/page-0009.png",
-      "byteLength": 89880,
-      "sha256": "46a9f18b9f32f89c3825a06aa107c1dd0f9acec66d93a868dadf2ae091947994",
+      "byteLength": 81870,
+      "sha256": "b6728ceffaa4c2edb93e4064c27d46d917cf1ae71b7ca6189ab9ac08fbc0e35d",
       "width": 1441,
       "height": 811
     },
     {
       "page": 10,
       "file": "pages/page-0010.png",
-      "byteLength": 57986,
-      "sha256": "24b1995d9508701927d09eb14657e74020fa70c08462d8777aa7b6c5f62ba2fd",
+      "byteLength": 49491,
+      "sha256": "c973f94c7ef4223fda5c419684f8149798afec1ab2d44f57137d103e2339258b",
       "width": 1441,
       "height": 811
     },
     {
       "page": 11,
       "file": "pages/page-0011.png",
-      "byteLength": 84784,
-      "sha256": "70a14f38cfcb6e3e407bd0100334ba81fe67c38673d977e9bd1a25f49737b6e1",
+      "byteLength": 72194,
+      "sha256": "85e197a71bb20d186cf2eaa80ef444f5d7fc295e1bb89ca6a0779c8b2f5cd569",
       "width": 1441,
       "height": 811
     },
     {
       "page": 12,
       "file": "pages/page-0012.png",
-      "byteLength": 64579,
-      "sha256": "84f73b3f6e3abc64b8d8bc3ff357e4ec1b64333ccdbb70244a4687e53ad3aa08",
+      "byteLength": 42203,
+      "sha256": "5708f1a1264b33bacca64cdc6961f3c6928f12a4d697c7ca17e392289d1f26ea",
       "width": 1441,
       "height": 811
     }
   ],
   "manifest": {
     "file": "pages/manifest.json",
-    "byteLength": 4741,
-    "sha256": "bb29f7d02d974c37d79a272245dfe1601190f421b8425fcdf247fd77a96fe7d0"
+    "byteLength": 4512,
+    "sha256": "b3fb6e68facc87f9d396c5b13d609066de26349261922ea7247815ba0941029d"
   }
 }
