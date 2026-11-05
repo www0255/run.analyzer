@@ -172,6 +172,21 @@ def provider_label(base_url: str) -> str:
     return PRESET_CUSTOM
 
 
+def preset_for_base_url(base_url: str) -> str:
+    """把 base_url 归到预设下拉的某一项。
+
+    注意不能拿 provider_label() 的返回值直接当下拉值：它返回 "DeepSeek"，
+    而预设项叫 "DeepSeek（推荐，便宜）"——不匹配就会在边栏显示「自定义」，
+    与下方「已从 Secrets 检测到 DeepSeek」自相矛盾。
+    """
+    label = provider_label(base_url)
+    if label == "DeepSeek":
+        return PRESET_DEEPSEEK
+    if label == "OpenAI":
+        return PRESET_OPENAI
+    return PRESET_CUSTOM
+
+
 def load_ai_config(store: dict = None) -> dict:
     """按 AI_* > DEEPSEEK_API_KEY > OPENAI_API_KEY 的优先级解析配置。
 
@@ -886,11 +901,11 @@ def render_sidebar() -> tuple:
         )
 
         preset_options = list(PROVIDER_PRESETS) + [PRESET_CUSTOM]
-        detected_label = provider_label(detected["base_url"]) if detected["has_secret_key"] else PRESET_CUSTOM
+        detected_preset = preset_for_base_url(detected["base_url"]) if detected["has_secret_key"] else PRESET_CUSTOM
         preset = st.selectbox(
             "服务商预设",
             preset_options,
-            index=preset_options.index(detected_label if detected_label in preset_options else PRESET_CUSTOM),
+            index=preset_options.index(detected_preset),
             key=WIDGET_PRESET,
         )
         apply_provider_preset(preset)

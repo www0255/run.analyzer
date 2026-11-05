@@ -314,6 +314,23 @@ def case_record_library():
     return at
 
 
+def case_provider_preset():
+    print("[10] 服务商预设标签与已配置的 Base URL 一致")
+    import app as app_module
+    options = list(app_module.PROVIDER_PRESETS) + [app_module.PRESET_CUSTOM]
+    pairs = [
+        ("https://api.deepseek.com", app_module.PRESET_DEEPSEEK),
+        ("https://api.openai.com/v1", app_module.PRESET_OPENAI),
+        ("https://gateway.example.com/v1", app_module.PRESET_CUSTOM),
+    ]
+    for base_url, expected in pairs:
+        got = app_module.preset_for_base_url(base_url)
+        expect(got == expected, "Base URL 归一到预设项", "{0} -> {1}".format(base_url, got))
+        expect(got in options, "归一结果在下拉选项里", got)
+    expect(app_module.provider_label("https://api.deepseek.com") != app_module.preset_for_base_url("https://api.deepseek.com"),
+           "展示名与预设项不是同一个字符串")
+
+
 if __name__ == "__main__":
     case_demo_general()
     case_heart_rate_optional()
@@ -324,6 +341,7 @@ if __name__ == "__main__":
     case_upload_and_vision_without_key()
     case_smooth_chart_and_large_data()
     case_record_library()
+    case_provider_preset()
     print("=" * 60)
     if FAILED:
         print("FAILED:", FAILED)
