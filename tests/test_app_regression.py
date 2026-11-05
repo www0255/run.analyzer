@@ -23,7 +23,9 @@ def expect(condition, label, detail=""):
 
 
 def texts(at):
+    # subheader 也算正文：跑量统计 / 月度复盘已经改成 st.subheader 与其它区块同级
     return "\n".join([str(element.value) for element in at.markdown] +
+                     [str(element.value) for element in at.subheader] +
                      [str(element.value) for element in at.warning] +
                      [str(element.value) for element in at.info] +
                      [str(element.value) for element in at.success] +
@@ -39,6 +41,12 @@ def case_demo_general():
     expect(any("上传跑步记录" in str(s.value) for s in at.subheader), "统一上传区在主入口")
     expect(any("数据来源" in str(r.label) for r in at.radio), "存在「截图识别 / CSV 文件」切换")
     expect(any("环境自检" in str(exp.label) for exp in at.expander), "环境自检收在上传区内")
+    body = texts(at)
+    expect("警校" not in body, "页面已无警校体能考核入口")
+    expect("参考目标线" not in body, "已移除 1000 米参考目标线")
+    expect("跑量统计" in body, "跑量统计区出现")
+    expect(any("跑者能力综合档案" in str(exp.label) for exp in at.expander),
+           "六维能力档案入口出现")
     return at
 
 
@@ -61,22 +69,77 @@ def case_heart_rate_optional():
     return at
 
 
-def case_police_and_slider():
-    print("[3] 警校体能考核模式 + 参考目标线滑块")
+def case_volume_and_ability():
+    print("[3] 跑量统计 + 能力档案 + 月度复盘 + 迭代预览")
     at = AppTest.from_file(APP, default_timeout=120).run()
-    at.sidebar.radio[0].set_value("警校体能考核模式").run()
-    expect(not at.exception, "切换到警校模式无异常", [str(e) for e in at.exception])
-    expect(len(at.slider) >= 1, "参考目标线滑块出现")
-    if at.slider:
-        at.slider[0].set_value(300).run()
-        expect(not at.exception, "拖动滑块后无异常", [str(e) for e in at.exception])
-        grid = "\n".join(str(m.value) for m in at.markdown)
-        expect("参考目标线" in grid and "1000 米" in grid, "四方图出现 1000 米折算指标", repr(grid[-120:]))
+    expect(not at.exception, "单模式页面无异常", [str(e) for e in at.exception])
+    expect(not at.radio or len([r for r in at.radio if "模式" in str(r.label)]) == 0,
+           "侧边栏不再有模式切换（已合并为单一分析路径）")
+    joined = texts(at)
+    expect("跑量统计" in joined, "跑量统计区出现")
+    expect("训练周数" in joined or "周均跑量" in joined, "跑量关键指标进表格")
+    labels = [str(e.label) for e in at.expander]
+    expect(any("能力综合档案" in item for item in labels), "六维能力档案收在折叠页", str(labels))
+    expect(any("后续迭代" in item for item in labels), "后续迭代预览收在折叠页", str(labels))
+    expect(any("月度复盘" in str(s.value) for s in at.subheader) or "月度复盘" in joined, "月度复盘区出现")
     return at
 
 
+def case_ability_metrics():
+    print("[4] 能力档案 / 负荷 / 表现趋势的数值规则")
+    import training_metrics as metrics
+    import pandas as pd
+
+    demo = ROOT / "demo_csv"
+    path = demo / "03_冲刺提升_60次.csv"
+    if not path.exists():
+        print("  [SKIP] 缺 60 次样例，跳过能力档案断言")
+        return
+    df = pd.read_csv(path, encoding="utf-8-sig")
+    profile = metrics.build_ability_profile(df)
+    expect(len(profile) == 6, "六维全部返回", str([i["name"] for i in profile]))
+    expect([i["name"] for i in profile] == metrics.ABILITY_DIMENSIONS, "维度顺序与常量一致")
+    expect(all(0 <= (i["score"] or 0) <= 100 for i in profile), "评分都在 0-100 内")
+    expect(all(i["basis"] for i in profile), "每项都给了依据")
+
+    weekly, monthly = metrics.volume_breakdown(df)
+    expect(not weekly.empty and not monthly.empty, "周表与月表都非空")
+    expect(abs(weekly["里程"].sum() - monthly["里程"].sum()) < 1e-6, "周表与月表总里程一致")
+    expect(abs(monthly["里程"].sum() - df["里程(km)"].sum()) < 1e-6, "月表合计等于原始里程合计")
+
+    load = metrics.build_load_series(df)
+    expect(load is not None and len(load) > 0, "负荷序列可算")
+    expect(float(load["short"].iloc[-1]) >= 0, "短期负荷非负")
+    trend = metrics.performance_trend(df)
+    expect(not trend.empty and abs(float(trend["rpi"].iloc[0]) - 100.0) < 1e-6, "表现指数首条为 100")
+
+    months = metrics.month_options(df)
+    expect(months == sorted(months) and len(months) >= 2, "月份按时间升序", str(months))
+    text = metrics.month_stats_text(df, months[-1])
+    expect("统计月份" in text and "月跑量" in text, "单月摘要含月份与跑量", repr(text[:60]))
+
+
+def case_heart_rate_less_month():
+    print("[5] 无心率数据时的能力档案不虚构")
+    import training_metrics as metrics
+    import pandas as pd
+
+    path = ROOT / "demo_csv" / "05_缺心率列_45次.csv"
+    if not path.exists():
+        print("  [SKIP] 缺无心率样例")
+        return
+    df = pd.read_csv(path, encoding="utf-8-sig")
+    profile = {i["name"]: i for i in metrics.build_ability_profile(df)}
+    expect(profile["心血管基础"]["caliber"] in ("代理", "实测"), "无心率时改用代理口径",
+           profile["心血管基础"]["caliber"])
+    expect("心率" in profile["心血管基础"]["basis"] or "配速" in profile["心血管基础"]["basis"],
+           "依据里说明用了什么字段")
+    text = metrics.month_stats_text(df, metrics.month_options(df)[-1])
+    expect("无心率数据" in text, "月度摘要明确写无心率", repr(text[-60:]))
+
+
 def case_real_mode_without_key():
-    print("[4] 关闭演示模式（无 Key）自动降级")
+    print("[6] 关闭演示模式（无 Key）自动降级")
     at = AppTest.from_file(APP, default_timeout=120).run()
     at.sidebar.checkbox[0].set_value(False).run()
     expect(not at.exception, "真实模式无 Key 时无异常", [str(e) for e in at.exception])
@@ -86,7 +149,7 @@ def case_real_mode_without_key():
 
 def case_upload_and_vision_without_key():
     """页面级：模拟多图上传 -> 离线识别 -> 点「用大模型识别」但无 Key。"""
-    print("[5] 多图上传 + 视觉引擎无 Key 友好提示")
+    print("[7] 多图上传 + 视觉引擎无 Key 友好提示")
     import streamlit as st
 
     class FakeUpload:
@@ -135,7 +198,7 @@ def case_upload_and_vision_without_key():
 
 def case_smooth_chart_and_large_data():
     """图表平滑 + 大数据给压缩摘要：不靠肉眼，直接查 trace 与摘要长度。"""
-    print("[6] 曲线平滑与大数据摘要上界")
+    print("[8] 曲线平滑与大数据摘要上界")
     import app
 
     demo = ROOT / "demo_csv"
@@ -149,12 +212,12 @@ def case_smooth_chart_and_large_data():
     df_small, _, err_small = app.load_run_data(open(small, "rb"))
     expect(err_big is None and err_small is None, "演示 CSV 可加载", str(err_big or err_small))
 
-    payload, compressed = app.build_ai_payload(df_big, app.MODE_GENERAL, 270)
+    payload, compressed = app.build_ai_payload(df_big)
     expect(compressed, "500 行数据走压缩摘要")
     expect(len(payload) <= app.AI_DIGEST_MAX_CHARS, "摘要长度不超过硬上限",
            "{0} <= {1}".format(len(payload), app.AI_DIGEST_MAX_CHARS))
     expect("汇总" in payload and "最近" in payload, "摘要含分段汇总与最近记录")
-    small_payload, small_compressed = app.build_ai_payload(df_small, app.MODE_GENERAL, 270)
+    small_payload, small_compressed = app.build_ai_payload(df_small)
     expect(not small_compressed, "30 行数据仍给原始 CSV（不提前压缩）", "{0} 字符".format(len(small_payload)))
 
     figure = app.plot_trend(df_big, "里程(km)", "#fff")
@@ -168,7 +231,9 @@ def case_smooth_chart_and_large_data():
 if __name__ == "__main__":
     case_demo_general()
     case_heart_rate_optional()
-    case_police_and_slider()
+    case_volume_and_ability()
+    case_ability_metrics()
+    case_heart_rate_less_month()
     case_real_mode_without_key()
     case_upload_and_vision_without_key()
     case_smooth_chart_and_large_data()

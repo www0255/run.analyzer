@@ -1,9 +1,12 @@
 """Run Analyzer：跑步数据分析与体能训练方案生成器。
 
-双模式（通用跑者模式 / 警校体能考核模式）。演示模式直接读取 data/ 下的预置分析
-结果并渲染，不调用任何外部 API、不需要任何 Key；它是「没检测到 Key」时的默认值，
-配好 Key 之后打开页面即走真实 AI（勾选仍可随时切回）。
+单一分析模式（跑者训练分析）。演示模式直接读取 data/ 下的预置分析结果并渲染，
+不调用任何外部 API、不需要任何 Key；它是「没检测到 Key」时的默认值，配好 Key
+之后打开页面即走真实 AI（勾选仍可随时切回）。
 真实 AI 模式走 OpenAI 兼容 chat.completions，任何异常都会降级为演示结果。
+
+页面顺序：数据接入 → 数据预览 → 趋势图 → 汇总统计 → 跑量统计（周 / 月）
+→ 运动评估与训练计划 → 月度复盘（AI）→ 能力档案与后续迭代（折叠）。
 """
 
 import inspect
@@ -22,6 +25,7 @@ import streamlit as st
 import coach_knowledge as coach
 import ocr_convert
 import theme
+import training_metrics as metrics
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,9 +44,7 @@ def render_figure(figure) -> None:
     else:
         st.plotly_chart(figure, use_container_width=True)
 
-MODE_GENERAL = "通用跑者模式"
-MODE_POLICE = "警校体能考核模式"
-MODE_OPTIONS = [MODE_GENERAL, MODE_POLICE]
+MODE_GENERAL = "跑者训练分析"    # 原「通用跑者模式」：现在只保留这一条分析路径
 
 REQUIRED_COLUMNS = ["日期", "里程(km)", "时长(分钟)", "配速(min/km)"]
 HEART_RATE_COLUMN = "平均心率"
@@ -51,16 +53,9 @@ NUMERIC_COLUMNS = ["里程(km)", "时长(分钟)", "配速(min/km)"]
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
-DEMO_FILES = {
-    MODE_GENERAL: DATA_DIR / "demo_analysis_general.json",
-    MODE_POLICE: DATA_DIR / "demo_analysis_police.json",
-}
-FALLBACK_ANALYSIS = (
-    "预置样例结果读取失败：请确认 data/demo_analysis_general.json "
-    "与 data/demo_analysis_police.json 存在且为合法 JSON。"
-)
+DEMO_ANALYSIS_FILE = DATA_DIR / "demo_analysis_general.json"
+FALLBACK_ANALYSIS = "预置样例结果读取失败：请确认 data/demo_analysis_general.json 存在且为合法 JSON。"
 
-DEFAULT_GOAL_SECONDS = 270
 AI_TIMEOUT_SECONDS = 90.0  # 云端冷启动 + 大记录压缩摘要后首字延迟可达 60 秒，给足余量
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
@@ -114,12 +109,12 @@ def load_demo_analysis(path_str: str) -> str:
     return content
 
 
-def get_demo_analysis(mode: str) -> str:
+def get_demo_analysis() -> str:
     """演示结果的唯一入口；读不到也必须返回可渲染文本，绝不抛异常。"""
     try:
-        return load_demo_analysis(str(DEMO_FILES[mode]))
+        return load_demo_analysis(str(DEMO_ANALYSIS_FILE))
     except Exception as exc:  # noqa: BLE001 - 演示模式是兜底路径，不能崩
-        logger.warning("载入预置分析结果失败: mode=%s error=%s", mode, type(exc).__name__)
+        logger.warning("载入预置分析结果失败: error=%s", type(exc).__name__)
         return FALLBACK_ANALYSIS
 
 
@@ -284,16 +279,7 @@ def load_run_data(source) -> tuple:
     return clean_run_dataframe(df)
 
 
-def with_police_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """配速(min/km) 直接折算为 1000 米用时（秒）：6.2 min/km -> 372 秒。"""
-    converted = df.copy()
-    converted["1000米用时(秒)"] = converted["配速(min/km)"] * 60.0
-    return converted
-
-
-def format_seconds(seconds: float) -> str:
-    total = int(round(float(seconds)))
-    return "{0}分{1:02d}秒".format(total // 60, total % 60)
+format_seconds = metrics.format_seconds   # 秒 -> 「6分12秒」，与能力档案共用同一套写法
 
 
 def preview_frame(df: pd.DataFrame) -> pd.DataFrame:
@@ -405,23 +391,8 @@ def render_general_charts(df: pd.DataFrame) -> None:
         st.caption("该数据没有心率列，心率趋势图已跳过。")
 
 
-def render_police_chart(df: pd.DataFrame, goal_seconds: int) -> None:
-    st.markdown(
-        '<div class="ra-fig-label">1000 米折算用时趋势（数值越小越快）</div>',
-        unsafe_allow_html=True,
-    )
-    figure = plot_trend(df, "1000米用时(秒)", theme.SILVER, height=320)
-    figure.add_hline(
-        y=goal_seconds,
-        line_dash="dash",
-        line_color=theme.GOAL,
-        annotation_text="参考目标线（可自行设置） {0}".format(format_seconds(goal_seconds)),
-        annotation_position="top left",
-    )
-    render_figure(figure)
-
-
-def render_stats(df: pd.DataFrame, mode: str, goal_seconds: int) -> None:
+def render_stats(df: pd.DataFrame) -> None:
+    """四格总览：次数 / 里程 / 配速 / 心率，读法与上方数据预览一致。"""
     heart_rate_text = "{0:.0f}".format(df[HEART_RATE_COLUMN].mean()) if has_heart_rate(df) else "—"
     render_stat_table([
         ("跑步次数", "{0}".format(len(df))),
@@ -430,28 +401,305 @@ def render_stats(df: pd.DataFrame, mode: str, goal_seconds: int) -> None:
         ("平均心率 bpm", heart_rate_text),
     ])
 
-    if mode == MODE_POLICE:
-        times = df["1000米用时(秒)"]
-        best = float(times.min())
-        gap = best - goal_seconds
-        render_stat_table([
-            ("最好折算 1000 米", format_seconds(best)),
-            ("参考目标线（可自行设置）", format_seconds(goal_seconds)),
-            ("与参考目标线的差距", "{0} {1}".format(format_seconds(abs(gap)), "落后" if gap > 0 else "领先")),
-        ])
 
-
-def build_stats_text(df: pd.DataFrame, mode: str, goal_seconds: int) -> str:
+def build_stats_text(df: pd.DataFrame) -> str:
+    """送进模型的统计摘要：只放真实算出来的数字，不做推断。"""
     lines = [
         "总跑步次数：{0}".format(len(df)),
         "累计里程：{0:.2f} km".format(df["里程(km)"].sum()),
         "平均配速：{0:.2f} min/km".format(df["配速(min/km)"].mean()),
-        "平均心率：{0}".format("{0:.0f} bpm".format(df[HEART_RATE_COLUMN].mean()) if has_heart_rate(df) else "—（本次数据未提供心率）"),
+        "平均心率：{0}".format(
+            "{0:.0f} bpm".format(df[HEART_RATE_COLUMN].mean())
+            if has_heart_rate(df) else "—（本次数据未提供心率）"),
     ]
-    if mode == MODE_POLICE:
-        lines.append("最好折算 1000 米用时：{0}".format(format_seconds(df["1000米用时(秒)"].min())))
-        lines.append("用户自设的参考目标线：{0}（不是任何官方或国家标准）".format(format_seconds(goal_seconds)))
+    weekly, monthly = metrics.volume_breakdown(df)
+    if not weekly.empty:
+        lines.append("训练周数：{0} 周，周均 {1:.1f} km，最大单周 {2:.1f} km".format(
+            len(weekly), weekly["里程"].mean(), weekly["里程"].max()))
+        lines.append("最近 4 周跑量：{0:.1f} km".format(weekly.tail(4)["里程"].sum()))
+    if not monthly.empty:
+        lines.append("按月跑量：" + "；".join(
+            "{0} {1:.1f} km".format(row["月份"].strftime("%Y-%m"), row["里程"])
+            for _, row in monthly.iterrows()))
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------- 跑量统计
+
+def _volume_frame(table: pd.DataFrame, key_column: str, date_format: str) -> pd.DataFrame:
+    """把周/月汇总表整理成给人看的四列。"""
+    view = table.copy()
+    view[key_column] = pd.to_datetime(view[key_column]).dt.strftime(date_format)
+    view = view.rename(columns={key_column: "起始日" if key_column == "周起始" else "月份",
+                                "里程": "里程 km", "时长": "时长 分钟"})
+    for column, digits in (("里程 km", 2), ("时长 分钟", 0), ("平均配速", 2)):
+        view[column] = view[column].round(digits)
+    return view
+
+
+def render_volume_section(df: pd.DataFrame) -> None:
+    """周跑量统计 + 月度分布：关键指标用表格，分布用柱状图，明细给可展开的表。"""
+    st.subheader("跑量统计 · 周 / 月")
+    weekly, monthly = metrics.volume_breakdown(df)
+    if weekly.empty:
+        st.caption("没有可统计的记录。")
+        return
+
+    render_stat_table(metrics.volume_summary(df))
+
+    left, right = st.columns([1.15, 1])
+    with left:
+        st.markdown('<div class="ra-fig-label">月度跑量分布 (km)</div>', unsafe_allow_html=True)
+        bar = go.Figure(
+            go.Bar(
+                x=monthly["月份"].dt.strftime("%Y-%m"),
+                y=monthly["里程"].round(2),
+                marker=dict(color=theme.STEEL, line=dict(width=0)),
+                text=monthly["里程"].round(1),
+                textposition="outside",
+                textfont=dict(color=theme.TEXT_MUTED, size=11),
+                hovertemplate="%{x}　%{y:.2f} km<extra></extra>",
+            )
+        )
+        theme.apply_base(bar, height=300)
+        bar.update_layout(bargap=0.5, showlegend=False)
+        bar.update_yaxes(rangemode="tozero")
+        # "2026-10" 会被 plotly 当成日期串解析成时间轴（刻度退化成 23:59:59.9996），必须显式声明分类轴
+        bar.update_xaxes(type="category")
+        render_figure(bar)
+    with right:
+        st.markdown('<div class="ra-fig-label">每周跑量 (km)</div>', unsafe_allow_html=True)
+        line = go.Figure(
+            go.Scatter(
+                x=weekly["周起始"],
+                y=weekly["里程"].round(2),
+                mode="lines+markers",
+                line=dict(color=theme.SILVER, width=2.2, shape="spline", smoothing=0.6),
+                marker=dict(size=5, color=theme.SILVER, line=dict(width=1, color=theme.BG)),
+                fill="tozeroy", fillcolor="rgba(211,215,221,.09)",
+                hovertemplate="%{x} 周　%{y:.2f} km<extra></extra>",
+            )
+        )
+        theme.apply_base(line, height=300)
+        line.update_xaxes(tickformat="%m-%d")
+        render_figure(line)
+
+    with st.expander("周 / 月明细表", expanded=False):
+        st.caption("周起始为周一；月表按自然月切分。")
+        st.dataframe(_volume_frame(weekly, "周起始", "%m-%d"), hide_index=True)
+        st.dataframe(_volume_frame(monthly, "月份", "%Y-%m"), hide_index=True)
+
+
+# ---------------------------------------------------------------- 能力档案
+
+def render_ability_section(df: pd.DataFrame) -> None:
+    """六维能力档案：雷达图 + 逐项依据。数据不足的维度显式写「数据不足」而不是补零。"""
+    profile = metrics.build_ability_profile(df)
+    missing = [item["name"] for item in profile if item["score"] is None]
+    # 数据不足的维度不画进多边形：补 0 会在图上造出一个假的短板顶点
+    available = [item for item in profile if item["score"] is not None]
+    names = [item["name"] for item in available]
+    scores = [item["score"] for item in available]
+
+    radar = go.Figure(
+        go.Scatterpolar(
+            r=scores + scores[:1] if scores else [],
+            theta=names + names[:1] if names else [],
+            fill="toself",
+            fillcolor="rgba(108,129,153,.20)",
+            line=dict(color=theme.SILVER, width=2.0),
+            marker=dict(size=5, color=theme.SILVER),
+            hovertemplate="%{theta}　%{r:.0f}<extra></extra>",
+        )
+    )
+    # 50 分基准环：收缩后的分数大多在 40-70 之间，没有基准线就看不出「这一项是强还是弱」
+    radar.add_trace(
+        go.Scatterpolar(
+            r=[50] * (len(names) + 1) if names else [],
+            theta=names + names[:1] if names else [],
+            mode="lines",
+            line=dict(color="rgba(211,215,221,.28)", width=1.0, dash="dot"),
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+    theme.apply_base(radar, height=380)
+    radar.update_layout(
+        polar=dict(
+            bgcolor="rgba(0,0,0,0)",
+            radialaxis=dict(range=[0, 100], showline=False, gridcolor="rgba(255,255,255,.09)",
+                            tickfont=dict(color=theme.TEXT_MUTED, size=10), tickvals=[25, 50, 75, 100]),
+            angularaxis=dict(gridcolor="rgba(255,255,255,.07)",
+                             tickfont=dict(color=theme.TEXT, size=11)),
+        ),
+        showlegend=False,
+        # 六边形顶点上的标签比圆环更靠近边框，左右留 66 才不会被裁掉
+        margin=dict(l=66, r=66, t=34, b=30),
+    )
+
+    left, right = st.columns([1, 1.05])
+    with left:
+        if len(available) >= 3:
+            render_figure(radar)
+        else:
+            st.caption("至少三个维度有数据才画雷达图；当前只有 {0} 项可评分。".format(len(available)))
+    with right:
+        rows = "".join(
+            "<tr><th scope='row'>{0}<span class='ra-caliber'>{1}</span></th><td>{2}</td></tr>".format(
+                item["name"],
+                item["caliber"],
+                "—" if item["score"] is None else "{0:.0f}".format(item["score"]),
+            )
+            for item in profile
+        )
+        st.markdown(
+            '<table class="ra-stats"><thead><tr><th>维度 / 口径</th><th>评分</th></tr></thead>'
+            "<tbody>{0}</tbody></table>".format(rows),
+            unsafe_allow_html=True,
+        )
+        for item in profile:
+            if item["score"] is None:
+                continue
+            st.caption("**{0}** · {1}".format(item["name"], item["basis"]))
+    if missing:
+        st.caption("数据不足：{0} —— 这几项需要更多记录或额外字段，暂不评分。".format("、".join(missing)))
+    st.caption(
+        "口径说明：评分由本机规则算出并归一化到 0-100，用于找相对短板与观察变化，不是体测结论；"
+        "虚线多边形是 50 分基准，落在里面的维度就是当前短板。样本少于 30 次时分数会向 50 收缩，"
+        "所以记录越少越不该拿绝对分和别人比。「估算」来自等效 5 公里成绩与 Daniels 公式，"
+        "「代理」表示用可得字段近似。"
+    )
+
+
+# ---------------------------------------------------------------- 月度复盘
+
+def render_month_review(df: pd.DataFrame, demo_mode: bool, demo_content: str, settings: dict) -> None:
+    """按月复盘：先给本机算出的真实数字，再（可选）让模型补一段文字复盘。"""
+    st.subheader("月度复盘")
+    months = metrics.month_options(df)
+    if not months:
+        st.caption("没有可复盘的月份。")
+        return
+
+    label = st.selectbox("选择月份", months, index=len(months) - 1, key="month_review_pick")
+    month_df = metrics.slice_month(df, label)
+    st.dataframe(preview_frame(month_df), hide_index=True)
+
+    stats_text = metrics.month_stats_text(df, label)
+    with st.expander("本月统计（本机计算，无需 Key）", expanded=True):
+        st.markdown(
+            "<div class='ra-pre'>{0}</div>".format(stats_text.replace("\n", "<br>")),
+            unsafe_allow_html=True,
+        )
+
+    key_name = "month_review_text_" + label
+    if demo_mode or not settings["api_key"]:
+        st.caption("当前是演示模式（或未配置 Key）：下面是预置的复盘样例，配好 Key 后可换成这个月的真实分析。")
+        st.markdown(demo_content)
+        return
+
+    if st.button("用 AI 复盘这个月", key="month_review_run"):
+        messages = coach.build_month_messages(label, stats_text, metrics.month_records_csv(df, label))
+        try:
+            with st.spinner("AI 复盘中，最长等待 {0:.0f} 秒...".format(AI_TIMEOUT_SECONDS)):
+                st.session_state[key_name] = call_ai(
+                    settings["base_url"], settings["model_name"], settings["api_key"], messages, MODE_GENERAL)
+        except Exception as exc:  # noqa: BLE001 - 任何异常都不许打断页面
+            logger.warning("月度复盘失败: error=%s detail=%s", type(exc).__name__, exc)
+            st.error("AI 复盘失败（{0}）：{1}".format(type(exc).__name__, describe_error(exc)))
+            return
+
+    cached = st.session_state.get(key_name)
+    if cached:
+        st.markdown(cached)
+    else:
+        st.caption("点击按钮，让模型基于上面的真实数字写一段本月复盘（会明确区分「记录支持的结论」与「数据不足」）。")
+
+
+# ---------------------------------------------------------------- 迭代预览
+
+def render_roadmap_section(df: pd.DataFrame) -> None:
+    """后续迭代预览：能算的先用真实数据画出来，算不了的写清缺哪个字段。"""
+    with st.expander("后续迭代预览（负荷 / 睡眠 / 表现趋势）", expanded=False):
+        st.caption("这一区是下一版要展开的方向：有真实数据的先画出来，缺字段的明确标出需要什么。")
+
+        load = metrics.build_load_series(df)
+        if load is None or load.empty:
+            st.caption("30 天训练负荷：记录不足，暂无法计算。")
+        else:
+            latest = load.iloc[-1]
+            ratio = latest["ratio"]
+            st.markdown(
+                '<div class="ra-fig-label">30 天训练负荷（短期 7 天 / 长期 28 天折周均）</div>',
+                unsafe_allow_html=True,
+            )
+            figure = go.Figure()
+            figure.add_scatter(
+                x=load["date"], y=load["long"].round(2), mode="lines", name="长期负荷（28 天折周均）",
+                line=dict(color=theme.LOAD_LONG, width=2.2, shape="spline", smoothing=0.7),
+                hovertemplate="%{x|%m-%d}　%{y:.2f} km<extra>长期</extra>",
+            )
+            figure.add_scatter(
+                x=load["date"], y=load["short"].round(2), mode="lines", name="短期负荷（近 7 天）",
+                line=dict(color=theme.LOAD_SHORT, width=2.2, shape="spline", smoothing=0.7),
+                hovertemplate="%{x|%m-%d}　%{y:.2f} km<extra>短期</extra>",
+            )
+            theme.apply_base(figure, height=320)
+            figure.update_layout(legend=dict(orientation="h", y=1.12, x=0))
+            render_figure(figure)
+            st.caption(
+                "最近一天：短期 {0:.1f} km，长期 {1:.1f} km，负荷比 {2}。"
+                "负荷比长期高于 1.5 通常意味着近期加量偏快，下一版会给出区间提示。".format(
+                    latest["short"], latest["long"],
+                    "—" if pd.isna(ratio) else "{0:.2f}".format(ratio))
+            )
+
+        trend = metrics.performance_trend(df)
+        if trend.empty:
+            st.caption("表现趋势：需要至少一次 3 km 以上的记录才能估算。")
+        else:
+            st.markdown(
+                '<div class="ra-fig-label">训练表现趋势（估算 VO2max / 跑步表现指数）</div>',
+                unsafe_allow_html=True,
+            )
+            perf = go.Figure()
+            perf.add_scatter(
+                x=trend["date"], y=trend["vo2"].round(1), mode="lines", name="估算 VO2max (ml/kg/min)",
+                line=dict(color=theme.SILVER, width=2.2, shape="spline", smoothing=0.7),
+                hovertemplate="%{x|%m-%d}　%{y:.1f}<extra>VO2max</extra>",
+            )
+            perf.add_scatter(
+                x=trend["date"], y=trend["rpi"].round(1), mode="lines", name="跑步表现指数（首次 = 100）",
+                line=dict(color=theme.LOAD_SHORT, width=2.0, shape="spline", smoothing=0.7, dash="dot"),
+                yaxis="y2",
+                hovertemplate="%{x|%m-%d}　%{y:.1f}<extra>RPI</extra>",
+            )
+            theme.apply_base(perf, height=320)
+            perf.update_layout(
+                legend=dict(orientation="h", y=1.12, x=0),
+                yaxis2=dict(overlaying="y", side="right", showgrid=False,
+                            tickfont=dict(color=theme.TEXT_MUTED, size=10), title=None),
+            )
+            render_figure(perf)
+            st.caption("两条线都是估算：由等效 5 公里成绩经 Daniels 公式换算，只用于看自己的变化方向。")
+
+        st.markdown('<div class="ra-fig-label">睡眠质量 × 训练表现（待接入睡眠字段）</div>',
+                    unsafe_allow_html=True)
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**睡眠记录（待接入）**")
+            st.dataframe(pd.DataFrame({
+                "日期": ["—"], "睡眠时长": ["—"], "入睡时间": ["—"], "睡眠评分": ["—"],
+            }), hide_index=True)
+        with right:
+            st.markdown("**同日训练表现**")
+            st.dataframe(pd.DataFrame({
+                "日期": ["—"], "平均配速": ["—"], "平均心率": ["—"], "主观 RPE": ["—"],
+            }), hide_index=True)
+        st.caption(
+            "这一块目前没有数据来源：手表的睡眠数据不在截图里，也不在 CSV 四列之内。"
+            "下一版计划加「睡眠 CSV 导入」与按日期对齐，再判断睡眠与次日表现的关系。"
+        )
 
 
 AI_DIGEST_MAX_CHARS = 4000   # 送进模型的数据段落硬上限，超出即视为上下文风险
@@ -464,7 +712,7 @@ def _rate_text(value) -> str:
     return "{0:.0f}".format(value) if pd.notna(value) else "—"
 
 
-def build_ai_digest(df: pd.DataFrame, mode: str, goal_seconds: int) -> str:
+def build_ai_digest(df: pd.DataFrame) -> str:
     """把任意规模的记录压成有长度上界的摘要：总量 + 趋势对比 + 分段汇总 + 最近若干次。
 
     送进模型的长度只跟分段数有关，5000 行的 CSV 也不会再撑爆上下文或让模型数不清。
@@ -488,11 +736,11 @@ def build_ai_digest(df: pd.DataFrame, mode: str, goal_seconds: int) -> str:
                 frame[HEART_RATE_COLUMN].mean(), frame[HEART_RATE_COLUMN].min(), frame[HEART_RATE_COLUMN].max())
             if has_hr else "—（本次数据未提供心率）"),
     ]
-    if mode == MODE_POLICE:
-        times = frame["1000米用时(秒)"]
-        lines.append("1000 米折算：最好 {0}，平均 {1}，最慢 {2}".format(
-            format_seconds(times.min()), format_seconds(times.mean()), format_seconds(times.max())))
-        lines.append("参考目标线（用户自设，非官方标准）：{0}".format(format_seconds(goal_seconds)))
+    profile = metrics.build_ability_profile(df)
+    lines.append("能力档案（规则评分 0-100，用于找相对短板，不是体检结论）：")
+    for item in profile:
+        score = "—" if item["score"] is None else "{0:.0f}".format(item["score"])
+        lines.append("  {0} {1}｜{2}｜{3}".format(item["name"], score, item["basis"], item["caliber"]))
 
     buckets = []
     for key, chunk in frame.groupby("_bucket", sort=True):
@@ -536,12 +784,12 @@ def build_ai_digest(df: pd.DataFrame, mode: str, goal_seconds: int) -> str:
     return digest
 
 
-def build_ai_payload(df: pd.DataFrame, mode: str, goal_seconds: int) -> tuple:
+def build_ai_payload(df: pd.DataFrame) -> tuple:
     """小数据给原始 CSV（最精确），大数据给压缩摘要（长度有上界）。返回 (文本, 是否压缩)。"""
     raw = df.to_csv(index=False)
     if len(df) <= AI_RAW_ROW_LIMIT and len(raw) <= AI_DIGEST_MAX_CHARS:
         return raw, False
-    return build_ai_digest(df, mode, goal_seconds), True
+    return build_ai_digest(df), True
 
 
 def describe_error(exc: Exception) -> str:
@@ -616,7 +864,8 @@ def ai_status_line(detected: dict, demo_mode: bool, has_manual_key: bool = False
 def render_sidebar() -> tuple:
     with st.sidebar:
         st.header("分析模式")
-        mode = st.radio("选择模式", MODE_OPTIONS, index=0)
+        st.caption("跑者训练分析：一份记录 → 趋势、跑量、能力档案与训练方案。")
+        mode = MODE_GENERAL
 
         st.markdown("---")
         st.header("AI 设置")
@@ -840,7 +1089,7 @@ def render_screenshot_entry(settings: dict):
     return edited
 
 
-def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings: dict, goal_seconds: int) -> None:
+def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings: dict) -> None:
     """演示模式永远先渲染预置结果；真实模式异常时也回到同一条渲染路径。"""
     st.subheader("运动评估与训练计划")
 
@@ -870,13 +1119,15 @@ def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings:
         )
         return
 
-    payload, compressed = build_ai_payload(df, mode, goal_seconds)
+    payload, compressed = build_ai_payload(df)
     if compressed:
         st.caption(
             "数据量较大（{0} 行）：已自动压缩为分段汇总 + 最近 {1} 次记录再送模型，"
             "长度有上界，不会因为记录太多而超上下文失败。".format(len(df), RECENT_ROW_LIMIT)
         )
-    messages = coach.build_messages(mode, build_stats_text(df, mode, goal_seconds), payload, goal_seconds)
+
+
+    messages = coach.build_messages(build_stats_text(df), payload)
     try:
         with st.spinner("AI 分析中，最长等待 {0:.0f} 秒...".format(AI_TIMEOUT_SECONDS)):
             text = call_ai(settings["base_url"], settings["model_name"], settings["api_key"], messages, mode)
@@ -900,10 +1151,9 @@ def main() -> None:
     theme.render_space_background(settings["space_on"], settings["space_interactive"])
     logger.info("页面渲染: mode=%s demo_mode=%s", mode, demo_mode)
 
-    demo_content = get_demo_analysis(mode)
+    demo_content = get_demo_analysis()
 
     df = None
-    goal_seconds = DEFAULT_GOAL_SECONDS
     notes, error = [], None
 
     # 主入口：一个方框内切换「截图识别 / CSV 文件」，引擎自检也收在里面
@@ -934,35 +1184,24 @@ def main() -> None:
         st.subheader("数据预览")
         st.dataframe(preview_frame(df), hide_index=True)
 
-        analysis_df = with_police_columns(df) if mode == MODE_POLICE else df
-
         st.subheader("可视化图表")
-        render_general_charts(analysis_df)
-        if mode == MODE_POLICE:
-            st.markdown("#### 1000 米折算用时与参考目标线")
-            goal_seconds = st.slider(
-                "参考目标线（可自行设置）",
-                min_value=180,
-                max_value=420,
-                value=DEFAULT_GOAL_SECONDS,
-                step=5,
-                help="单位：秒。此线只是你自己设置的对照刻度，不代表任何官方或国家标准。",
-            )
-            st.caption("当前参考目标线：{0}（可拖动滑块自行调整）".format(format_seconds(goal_seconds)))
-            render_police_chart(analysis_df, goal_seconds)
+        render_general_charts(df)
 
         st.subheader("汇总统计")
-        render_stats(analysis_df, mode, goal_seconds)
+        render_stats(df)
 
-    render_analysis(mode, demo_mode, demo_content, analysis_df_for_prompt(mode, df), settings, goal_seconds)
+        render_volume_section(df)
+
+    render_analysis(mode, demo_mode, demo_content, df, settings)
+
+    if df is not None:
+        render_month_review(df, demo_mode, demo_content, settings)
+        with st.expander("跑者能力综合档案（六维雷达）", expanded=False):
+            render_ability_section(df)
+        render_roadmap_section(df)
+
     st.markdown("---")
     st.caption("数据仅在本机处理；截图识别默认走本地离线引擎，不发送任何网络请求。")
-
-
-def analysis_df_for_prompt(mode: str, df):
-    if df is None:
-        return None
-    return with_police_columns(df) if mode == MODE_POLICE else df
 
 
 if __name__ == "__main__":
