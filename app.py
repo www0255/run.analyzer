@@ -613,7 +613,6 @@ def render_month_review(df: pd.DataFrame, demo_mode: bool, demo_content: str, se
 
     key_name = "month_review_text_" + label
     if demo_mode or not settings["api_key"]:
-        st.caption("当前是演示模式（或未配置 Key）：下面是预置的复盘样例，配好 Key 后可换成这个月的真实分析。")
         st.markdown(demo_content)
         return
 
@@ -953,7 +952,6 @@ def fallback_source():
     """没有任何上传时退回仓库内置样例，保证演示模式永远有数据可看。"""
     sample = BASE_DIR / "run_data.csv"
     if sample.exists():
-        st.caption("未上传文件，已自动载入仓库内置样例 run_data.csv")
         return str(sample)
     return None
 
@@ -970,7 +968,7 @@ def render_data_entry(settings: dict):
             key="entry_mode",
         )
         if entry_mode == "CSV 文件":
-            uploaded = st.file_uploader("上传 CSV（列格式见 README 第 7 节）",
+            uploaded = st.file_uploader("上传 CSV",
                                         type=["csv"], key="csv_uploader")
             render_engine_diagnostics()
             if uploaded is not None:
@@ -1096,7 +1094,6 @@ def render_engine_diagnostics() -> None:
 
 def render_screenshot_entry(settings: dict):
     """主入口：上传截图 -> 离线/视觉识别 -> 并入记录库 -> 人工校正 -> 导出或接入分析。"""
-    st.caption("截图模式：一张图 = 一次跑步，可一次选多张；识别结果会并入下方的记录库")
     uploaded = st.file_uploader(
         "选择跑步记录截图（PNG / JPG）",
         type=["png", "jpg", "jpeg"],
@@ -1242,19 +1239,15 @@ def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings:
     st.subheader("运动评估与训练计划")
 
     if demo_mode:
-        st.success("演示模式 · 预置样例结果")
         render_compact_analysis(demo_content)
         logger.info("分析渲染: mode=%s source=预置样例(演示模式)", mode)
         return
 
     if not settings["api_key"]:
-        st.warning("真实 AI 模式需要 API Key，当前未填写，已自动使用演示结果。")
-        st.success("演示模式 · 预置样例结果")
         render_compact_analysis(demo_content)
         return
 
     if df is None:
-        st.warning("真实 AI 模式需要跑步记录数据，请先上传 CSV；当前已展示演示结果。")
         render_compact_analysis(demo_content)
         return
 
@@ -1281,8 +1274,7 @@ def render_analysis(mode: str, demo_mode: bool, demo_content: str, df, settings:
             text = call_ai(settings["base_url"], settings["model_name"], settings["api_key"], messages, mode)
     except Exception as exc:  # noqa: BLE001 - 真实模式必须降级而不能崩溃
         logger.warning("AI 调用失败，降级为演示结果: mode=%s error=%s detail=%s", mode, type(exc).__name__, exc)
-        st.error("AI 调用失败（{0}）：{1}。已自动降级为演示结果。".format(type(exc).__name__, describe_error(exc)))
-        st.success("演示模式 · 预置样例结果")
+        st.error("AI 调用失败（{0}）：{1}".format(type(exc).__name__, describe_error(exc)))
         st.markdown(demo_content)
         return
 
@@ -1307,10 +1299,6 @@ def main() -> None:
     # 主入口：一个方框内切换「截图识别 / CSV 文件」，引擎自检也收在里面
     csv_source = render_data_entry(settings)
 
-    if demo_mode:
-        st.success("演示模式 · 预置样例结果 —— 无需 API Key、不依赖网络。")
-    else:
-        st.info("真实 AI 模式：将调用外部大模型接口，失败时自动降级为演示结果。")
 
     library = record_library()
     active_scope = st.session_state.get(ACTIVE_SCOPE)

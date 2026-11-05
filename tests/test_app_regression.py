@@ -45,7 +45,7 @@ def case_demo_general():
     at = AppTest.from_file(APP, default_timeout=120).run()
     expect(not at.exception, "无未捕获异常", [str(e) for e in at.exception])
     expect(len(at.radio) >= 1, "侧边栏模式单选存在")
-    expect("内置样例 run_data.csv" in texts(at), "CSV 兜底：自动载入 run_data.csv")
+    expect("数据预览" in texts(at), "CSV 兜底：静默载入内置样例 run_data.csv")
     expect(any("上传跑步记录" in str(s.value) for s in at.subheader), "统一上传区在主入口")
     expect(any("数据来源" in str(r.label) for r in at.radio), "存在「截图识别 / CSV 文件」切换")
     expect(any("环境自检" in str(exp.label) for exp in at.expander), "环境自检收在上传区内")
@@ -151,7 +151,7 @@ def case_real_mode_without_key():
     at = AppTest.from_file(APP, default_timeout=120).run()
     at.sidebar.checkbox[0].set_value(False).run()
     expect(not at.exception, "真实模式无 Key 时无异常", [str(e) for e in at.exception])
-    expect("演示" in texts(at), "页面回退到演示结果")
+    expect("近期状态评估" in texts(at), "页面回退到预置评估内容")
     return at
 
 
